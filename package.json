@@ -1,0 +1,25 @@
+{
+  "name": "sitecrawl",
+  "version": "1.0.0",
+  "main": "main.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "vue": "^3.5.16"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.4",
+    "concurrently": "^9.1.2",
+    "electron": "^36.4.0",
+    "electron-builder": "^26.0.12",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5",
+    "vue-tsc": "^2.2.10",
+    "wait-on": "^8.0.3"
+  }
+}
