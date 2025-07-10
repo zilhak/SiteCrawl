@@ -1,7 +1,7 @@
 {
   "name": "SiteCrawl",
   "version": "1.0.0",
-  "main": "dist/main.js",
+  "main": "dist/main/main.js",
   "scripts": {
     "dev": "concurrently \"npm run dev:vite\" \"npm run dev:electron\"",
     "dev:vite": "vite",
@@ -17,13 +17,16 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "quasar": "^2.18.1",
     "vue": "^3.5.16"
   },
   "devDependencies": {
+    "@quasar/vite-plugin": "^1.9.0",
     "@vitejs/plugin-vue": "^5.2.4",
     "concurrently": "^9.1.2",
     "electron": "^36.4.0",
     "electron-builder": "^26.0.12",
+    "sass-embedded": "^1.89.2",
     "typescript": "^5.8.3",
     "vite": "^6.3.5",
     "vue-tsc": "^2.2.10",

@@ -1,4 +1,6 @@
 import { app, BrowserWindow } from 'electron';
+import './handle/runner';
+import './handle/settings';
 
 const isDev = process.env.NODE_ENV === 'development';
 
@@ -9,8 +11,13 @@ app.on('window-all-closed', () => {
 
 function createWindow() {
   const mainWindow = new BrowserWindow({
-    width: 800,
-    height: 600,
+    width: 1200,
+    height: 800,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: __dirname + '/preload.js'
+    }
   });
   mainWindow.loadFile('index.html');
   
@@ -21,5 +28,3 @@ function createWindow() {
     mainWindow.loadFile('dist/index.html');
   }
 };
-
-console.log('main.ts');

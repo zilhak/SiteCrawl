@@ -14,7 +14,10 @@
     "moduleResolution": "node",
     "baseUrl": ".",
     "paths": {
-      "@/*": ["main/*"]
+      "@/*": ["main/*"],
+      "@interface/*": ["types/interface/*"],
+      "@component/*": ["renderer/component/*"],
+      "@style/*": ["renderer/style/*"]
     },
     "types": ["vite/client"]
   },
@@ -22,7 +25,7 @@
     "main/**/*", 
     "renderer/**/*",
     "types/vue-shims.d.ts"  
-  ],
+, "types/types.d.ts"  ],
   "exclude": [
     "node_modules",
     "dist"
