@@ -1,5 +1,7 @@
 <template>
+  <div class="sc-content-control">
 
+  </div>
 </template>
 
 <script setup lang="ts">
