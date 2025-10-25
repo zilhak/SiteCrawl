@@ -1,9 +1,0 @@
-#app {
-  --sc-contents-height: 50px;
-  --sc-gnb-height: 50px;
-  --sc-settings-height: 50px;
-
-  --sc-contents-height: var(--q-layout-header-height);
-  --sc-gnb-height: var(--q-layout-header-height);
-  --sc-settings-height: var(--q-layout-header-height);
-}

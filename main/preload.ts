@@ -1,7 +1,14 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { Settings } from '@interface/settings'
 
-contextBridge.exposeInMainWorld('electronAPI', {
-  getSettings: () => ipcRenderer.invoke('get-settings'),
-  setSettings: (settings: Settings) => ipcRenderer.invoke('set-settings', settings),
+contextBridge.exposeInMainWorld('crawler', {
+  startCrawl: (url: string) => ipcRenderer.invoke('crawler:start', url),
+  onProgress: (callback: (data: any) => void) => {
+    ipcRenderer.on('crawler:progress', (_event, data) => callback(data))
+  },
+  onComplete: (callback: (data: any) => void) => {
+    ipcRenderer.on('crawler:complete', (_event, data) => callback(data))
+  },
+  onError: (callback: (error: string) => void) => {
+    ipcRenderer.on('crawler:error', (_event, error) => callback(error))
+  }
 })
