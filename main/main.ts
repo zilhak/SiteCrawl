@@ -126,6 +126,17 @@ const setupIpcHandlers = (window: BrowserWindow) => {
     if (!result.canceled && result.filePaths.length > 0) {
       const selectedPath = result.filePaths[0]
       historyDB.setDatabasePath(selectedPath)
+
+      // Pipeline & Task 데이터베이스 초기화
+      const db = historyDB.getDatabase()
+      if (db) {
+        pipelineDB = new PipelineDatabase(db)
+        pipelineManager = new PipelineManager(pipelineDB)
+
+        taskDB = new TaskDatabase(db)
+        taskManager = new TaskManager(taskDB)
+      }
+
       return selectedPath
     }
 
