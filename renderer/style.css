@@ -17,9 +17,8 @@ body {
 }
 
 .container {
-  max-width: 1200px;
   margin: 0 auto;
-  padding: 20px;
+  padding: 20px 40px;
   width: 100%;
 }
 
@@ -818,4 +817,307 @@ body {
 
 .btn-delete-pattern:hover {
   color: #ff4444;
+}
+
+/* 일반 탭 - 저장소 설정 */
+.storage-path-section {
+  margin-top: 20px;
+}
+
+.path-display {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+.path-input {
+  flex: 1;
+  padding: 10px 14px;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 14px;
+  background: #f9f9f9;
+  color: #666;
+}
+
+.btn-select-path {
+  padding: 10px 20px;
+  background: #667eea;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.btn-select-path:hover {
+  background: #5568d3;
+  transform: translateY(-1px);
+}
+
+.storage-status {
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  margin-bottom: 20px;
+}
+
+.storage-status.active {
+  background: #e8f5e9;
+  color: #2e7d32;
+  border: 1px solid #a5d6a7;
+}
+
+.storage-status.inactive {
+  background: #fff3e0;
+  color: #e65100;
+  border: 1px solid #ffcc80;
+}
+
+/* 메인 화면 경고 메시지 */
+.storage-warning {
+  margin-top: 15px;
+  padding: 12px 16px;
+  background: #fff3e0;
+  color: #e65100;
+  border: 1px solid #ffcc80;
+  border-radius: 8px;
+  font-size: 14px;
+  text-align: center;
+}
+
+/* 헤더 버튼 그룹 */
+.header-buttons {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.mode-toggle-btn {
+  padding: 10px 20px;
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  backdrop-filter: blur(10px);
+}
+
+.mode-toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: translateY(-1px);
+}
+
+/* 파이프라인 선택 컴포넌트 */
+.pipeline-selector {
+  position: relative;
+  margin-bottom: 20px;
+}
+
+.pipeline-search-input {
+  width: 100%;
+  padding: 12px 16px;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 14px;
+  transition: border-color 0.2s;
+}
+
+.pipeline-search-input:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.pipeline-search-input::placeholder {
+  color: #999;
+}
+
+/* 파이프라인 검색 제안 드롭다운 */
+.pipeline-suggestions {
+  position: absolute;
+  top: calc(100% + 5px);
+  left: 0;
+  right: 0;
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  max-height: 300px;
+  overflow-y: auto;
+  z-index: 100;
+  animation: slideDown 0.2s;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.suggestion-item {
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: background 0.2s;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.suggestion-item:last-child {
+  border-bottom: none;
+}
+
+.suggestion-item:hover {
+  background: #f8f9ff;
+}
+
+.suggestion-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 4px;
+}
+
+.suggestion-desc {
+  font-size: 12px;
+  color: #666;
+}
+
+/* 선택된 파이프라인 표시 */
+.selected-pipeline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: #f0f4ff;
+  border: 2px solid #667eea;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.selected-pipeline-info {
+  flex: 1;
+}
+
+.selected-pipeline-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #667eea;
+  margin-bottom: 4px;
+}
+
+.selected-pipeline-desc {
+  font-size: 12px;
+  color: #666;
+}
+
+.btn-clear-pipeline {
+  background: none;
+  border: none;
+  font-size: 18px;
+  color: #999;
+  cursor: pointer;
+  padding: 4px 8px;
+  transition: color 0.2s;
+}
+
+.btn-clear-pipeline:hover {
+  color: #667eea;
+}
+
+/* 파이프라인 설정 화면 */
+.pipeline-config {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+}
+
+.pipeline-tabs {
+  display: flex;
+  border-bottom: 2px solid #e0e0e0;
+  gap: 5px;
+  padding: 0 20px;
+  background: #fafafa;
+}
+
+.pipeline-tab {
+  padding: 16px 24px;
+  background: none;
+  border: none;
+  font-size: 14px;
+  font-weight: 600;
+  color: #666;
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  transition: all 0.2s;
+  position: relative;
+  top: 2px;
+}
+
+.pipeline-tab:hover {
+  color: #667eea;
+  background: rgba(102, 126, 234, 0.05);
+}
+
+.pipeline-tab.active {
+  color: #667eea;
+  border-bottom-color: #667eea;
+  background: white;
+}
+
+.pipeline-tab-content {
+  padding: 40px;
+  min-height: 400px;
+  animation: fadeIn 0.3s;
+}
+
+.tab-panel {
+  animation: fadeIn 0.3s;
+}
+
+/* 탭 빈 상태 */
+.empty-tab-state {
+  text-align: center;
+  padding: 80px 40px;
+}
+
+.empty-tab-state h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 12px;
+}
+
+.empty-tab-state p {
+  font-size: 14px;
+  color: #666;
+  margin-bottom: 30px;
+  line-height: 1.6;
+}
+
+.btn-add-task {
+  padding: 12px 30px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.btn-add-task:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
 }

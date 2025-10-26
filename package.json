@@ -9,6 +9,7 @@
     "build:vite": "vite build",
     "build:electron": "tsc",
     "dist": "npm run build && electron-builder",
+    "postinstall": "electron-rebuild",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -16,11 +17,14 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "better-sqlite3": "^12.4.1",
     "playwright": "^1.49.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@electron/rebuild": "^4.0.1",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",

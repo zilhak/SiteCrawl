@@ -1,15 +1,26 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import * as path from 'path'
 import { Crawler } from './crawler'
+import { HistoryDatabase } from './database'
+import { PipelineDatabase, PipelineManager } from './pipeline'
+import { TaskDatabase, TaskManager } from './task'
 
 const isDev = !app.isPackaged
 
 let mainWindow: BrowserWindow | null = null
+const historyDB = new HistoryDatabase()
+let pipelineDB: PipelineDatabase | null = null
+let pipelineManager: PipelineManager | null = null
+let taskDB: TaskDatabase | null = null
+let taskManager: TaskManager | null = null
 
 const createWindow = () => {
   mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
+    width: 1600,
+    height: 1000,
+    minWidth: 1000,      // 최소 크기 제한
+    minHeight: 700,
+    center: true,        // 화면 중앙에 배치
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -36,6 +47,18 @@ const setupIpcHandlers = (window: BrowserWindow) => {
     try {
       const crawler = new Crawler(window)
       const result = await crawler.start(url, useSession, options)
+
+      // 히스토리 저장 (데이터베이스가 활성화된 경우)
+      if (historyDB.isActive()) {
+        historyDB.saveHistory({
+          url: result.url,
+          title: result.title,
+          description: result.description,
+          linkCount: result.links.length,
+          timestamp: result.timestamp
+        })
+      }
+
       window.webContents.send('crawler:complete', result)
       return result
     } catch (error) {
@@ -92,11 +115,260 @@ const setupIpcHandlers = (window: BrowserWindow) => {
       throw new Error(`세션 삭제 실패: ${errorMessage}`)
     }
   })
+
+  // 저장 경로 선택 대화상자
+  ipcMain.handle('storage:select-path', async () => {
+    const result = await dialog.showOpenDialog(window, {
+      properties: ['openDirectory', 'createDirectory'],
+      title: '저장 데이터 경로 선택'
+    })
+
+    if (!result.canceled && result.filePaths.length > 0) {
+      const selectedPath = result.filePaths[0]
+      historyDB.setDatabasePath(selectedPath)
+      return selectedPath
+    }
+
+    return null
+  })
+
+  // 저장 경로 설정
+  ipcMain.handle('storage:set-path', async (_event, storagePath: string) => {
+    try {
+      historyDB.setDatabasePath(storagePath)
+
+      // Pipeline & Task 데이터베이스 초기화
+      const db = historyDB.getDatabase()
+      if (db) {
+        pipelineDB = new PipelineDatabase(db)
+        pipelineManager = new PipelineManager(pipelineDB)
+
+        taskDB = new TaskDatabase(db)
+        taskManager = new TaskManager(taskDB)
+      }
+
+      return true
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      throw new Error(`저장 경로 설정 실패: ${errorMessage}`)
+    }
+  })
+
+  // 저장소 활성화 여부 확인
+  ipcMain.handle('storage:is-active', async () => {
+    return historyDB.isActive()
+  })
+
+  // 히스토리 조회
+  ipcMain.handle('history:get-all', async () => {
+    return historyDB.getAllHistory()
+  })
+
+  // 최근 히스토리 조회
+  ipcMain.handle('history:get-recent', async (_event, limit: number = 10) => {
+    return historyDB.getRecentHistory(limit)
+  })
+
+  // URL로 히스토리 검색
+  ipcMain.handle('history:search', async (_event, url: string) => {
+    return historyDB.getHistoryByUrl(url)
+  })
+
+  // 히스토리 삭제
+  ipcMain.handle('history:delete', async (_event, id: number) => {
+    return historyDB.deleteHistory(id)
+  })
+
+  // 모든 히스토리 삭제
+  ipcMain.handle('history:clear', async () => {
+    return historyDB.clearAllHistory()
+  })
+
+  // Pipeline CRUD
+  ipcMain.handle('pipeline:create', async (_event, name: string, description?: string) => {
+    if (!pipelineManager) {
+      throw new Error('저장소가 설정되지 않았습니다. 먼저 저장 경로를 설정해주세요.')
+    }
+    return pipelineManager.createPipeline(name, description)
+  })
+
+  ipcMain.handle('pipeline:save', async (_event, pipeline: any) => {
+    if (!pipelineManager) {
+      throw new Error('저장소가 설정되지 않았습니다.')
+    }
+    return pipelineManager.savePipeline(pipeline)
+  })
+
+  ipcMain.handle('pipeline:get', async (_event, id: string) => {
+    if (!pipelineManager) return null
+    return pipelineManager.getPipeline(id)
+  })
+
+  ipcMain.handle('pipeline:get-all', async () => {
+    if (!pipelineManager) return []
+    return pipelineManager.getAllPipelines()
+  })
+
+  ipcMain.handle('pipeline:search', async (_event, query: string) => {
+    if (!pipelineManager) return []
+    return pipelineManager.searchPipelines(query)
+  })
+
+  ipcMain.handle('pipeline:delete', async (_event, id: string) => {
+    if (!pipelineManager) return false
+    return pipelineManager.deletePipeline(id)
+  })
+
+  // Task Management
+  ipcMain.handle('pipeline:add-task', async (_event, pipelineId: string, task: any) => {
+    if (!pipelineManager) {
+      throw new Error('저장소가 설정되지 않았습니다.')
+    }
+    return pipelineManager.addTask(pipelineId, task)
+  })
+
+  ipcMain.handle('pipeline:remove-task', async (_event, pipelineId: string, taskName: string) => {
+    if (!pipelineManager) {
+      throw new Error('저장소가 설정되지 않았습니다.')
+    }
+    return pipelineManager.removeTask(pipelineId, taskName)
+  })
+
+  ipcMain.handle('pipeline:update-task', async (_event, pipelineId: string, taskName: string, updates: any) => {
+    if (!pipelineManager) {
+      throw new Error('저장소가 설정되지 않았습니다.')
+    }
+    return pipelineManager.updateTask(pipelineId, taskName, updates)
+  })
+
+  // Validation & Info
+  ipcMain.handle('pipeline:validate', async (_event, pipelineId: string) => {
+    if (!pipelineManager) {
+      return { valid: false, errors: ['저장소가 설정되지 않았습니다.'], warnings: [] }
+    }
+    return pipelineManager.validatePipeline(pipelineId)
+  })
+
+  ipcMain.handle('pipeline:get-stats', async (_event, pipelineId: string) => {
+    if (!pipelineManager) return null
+    return pipelineManager.getPipelineStats(pipelineId)
+  })
+
+  ipcMain.handle('pipeline:clone', async (_event, pipelineId: string, newName?: string) => {
+    if (!pipelineManager) return null
+    return pipelineManager.clonePipeline(pipelineId, newName)
+  })
+
+  // Task CRUD - CrawlTask
+  ipcMain.handle('task:create-crawl', async (_event, dto: any) => {
+    if (!taskManager) {
+      throw new Error('저장소가 설정되지 않았습니다.')
+    }
+    return taskManager.createCrawlTask(dto)
+  })
+
+  ipcMain.handle('task:update-crawl', async (_event, id: string, updates: any) => {
+    if (!taskManager) {
+      throw new Error('저장소가 설정되지 않았습니다.')
+    }
+    return taskManager.updateCrawlTask(id, updates)
+  })
+
+  // Task CRUD - ActionTask
+  ipcMain.handle('task:create-action', async (_event, dto: any) => {
+    if (!taskManager) {
+      throw new Error('저장소가 설정되지 않았습니다.')
+    }
+    return taskManager.createActionTask(dto)
+  })
+
+  ipcMain.handle('task:update-action', async (_event, id: string, updates: any) => {
+    if (!taskManager) {
+      throw new Error('저장소가 설정되지 않았습니다.')
+    }
+    return taskManager.updateActionTask(id, updates)
+  })
+
+  // Task 조회
+  ipcMain.handle('task:get', async (_event, id: string) => {
+    if (!taskManager) return null
+    return taskManager.getTask(id)
+  })
+
+  ipcMain.handle('task:get-all', async () => {
+    if (!taskManager) return []
+    return taskManager.getAllTasks()
+  })
+
+  ipcMain.handle('task:get-crawl', async () => {
+    if (!taskManager) return []
+    return taskManager.getCrawlTasks()
+  })
+
+  ipcMain.handle('task:get-action', async () => {
+    if (!taskManager) return []
+    return taskManager.getActionTasks()
+  })
+
+  ipcMain.handle('task:search', async (_event, query: string) => {
+    if (!taskManager) return []
+    return taskManager.searchTasks(query)
+  })
+
+  // Task 삭제
+  ipcMain.handle('task:delete', async (_event, id: string) => {
+    if (!taskManager) return false
+    return taskManager.deleteTask(id)
+  })
+
+  ipcMain.handle('task:delete-multiple', async (_event, ids: string[]) => {
+    if (!taskManager) return 0
+    return taskManager.deleteTasks(ids)
+  })
+
+  // Task 빠른 생성 (자동 이름)
+  ipcMain.handle('task:create-quick-crawl', async () => {
+    if (!taskManager) {
+      throw new Error('저장소가 설정되지 않았습니다.')
+    }
+    return taskManager.createQuickCrawlTask()
+  })
+
+  ipcMain.handle('task:create-quick-action', async () => {
+    if (!taskManager) {
+      throw new Error('저장소가 설정되지 않았습니다.')
+    }
+    return taskManager.createQuickActionTask()
+  })
+
+  // Task 페이지네이션
+  ipcMain.handle('task:get-paginated', async (_event, category: 'crawl' | 'action', page: number, pageSize: number) => {
+    if (!taskManager) {
+      return { tasks: [], total: 0, page: 1, pageSize: 20, totalPages: 0 }
+    }
+    return taskManager.getTasksPaginated(category, page, pageSize)
+  })
+
+  // Task 검증
+  ipcMain.handle('task:validate-crawl', async (_event, task: any) => {
+    if (!taskManager) {
+      return { valid: false, errors: ['저장소가 설정되지 않았습니다.'], warnings: [] }
+    }
+    return taskManager.validateCrawlTask(task)
+  })
+
+  ipcMain.handle('task:validate-action', async (_event, task: any) => {
+    if (!taskManager) {
+      return { valid: false, errors: ['저장소가 설정되지 않았습니다.'], warnings: [] }
+    }
+    return taskManager.validateActionTask(task)
+  })
 }
 
 app.whenReady().then(createWindow)
 
 app.on('window-all-closed', () => {
+  historyDB.close()
   if (process.platform !== 'darwin') app.quit()
 })
 
