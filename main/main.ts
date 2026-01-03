@@ -1,9 +1,12 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import * as path from 'path'
 import { Crawler } from './crawler'
+import type { CrawlOptions, LoginOptions } from './crawler'
 import { HistoryDatabase } from './database'
 import { PipelineDatabase, PipelineManager } from './pipeline'
+import type { Pipeline, PipelineTask } from './pipeline/types'
 import { TaskDatabase, TaskManager } from './task'
+import type { CreateCrawlTaskDTO, CreateActionTaskDTO, CrawlTask, ActionTask } from './task/types'
 
 const isDev = !app.isPackaged
 
@@ -43,10 +46,10 @@ const createWindow = () => {
 
 const setupIpcHandlers = (window: BrowserWindow) => {
   // 크롤링 시작
-  ipcMain.handle('crawler:start', async (_event, url: string, useSession: boolean = false, options?: any) => {
+  ipcMain.handle('crawler:start', async (_event, url: string, useSession: boolean = false, options?: unknown) => {
     try {
       const crawler = new Crawler(window)
-      const result = await crawler.start(url, useSession, options)
+      const result = await crawler.start(url, useSession, options as CrawlOptions)
 
       // 히스토리 저장 (데이터베이스가 활성화된 경우)
       if (historyDB.isActive()) {
@@ -69,10 +72,10 @@ const setupIpcHandlers = (window: BrowserWindow) => {
   })
 
   // 자동 로그인
-  ipcMain.handle('crawler:login', async (_event, options: any) => {
+  ipcMain.handle('crawler:login', async (_event, options: unknown) => {
     try {
       const crawler = new Crawler(window)
-      await crawler.login(options)
+      await crawler.login(options as LoginOptions)
       window.webContents.send('crawler:login-complete')
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
@@ -203,11 +206,11 @@ const setupIpcHandlers = (window: BrowserWindow) => {
     return pipelineManager.createPipeline(name, description)
   })
 
-  ipcMain.handle('pipeline:save', async (_event, pipeline: any) => {
+  ipcMain.handle('pipeline:save', async (_event, pipeline: unknown) => {
     if (!pipelineManager) {
       throw new Error('저장소가 설정되지 않았습니다.')
     }
-    return pipelineManager.savePipeline(pipeline)
+    return pipelineManager.savePipeline(pipeline as Pipeline)
   })
 
   ipcMain.handle('pipeline:get', async (_event, id: string) => {
@@ -231,11 +234,11 @@ const setupIpcHandlers = (window: BrowserWindow) => {
   })
 
   // Task Management
-  ipcMain.handle('pipeline:add-task', async (_event, pipelineId: string, task: any) => {
+  ipcMain.handle('pipeline:add-task', async (_event, pipelineId: string, task: unknown) => {
     if (!pipelineManager) {
       throw new Error('저장소가 설정되지 않았습니다.')
     }
-    return pipelineManager.addTask(pipelineId, task)
+    return pipelineManager.addTask(pipelineId, task as PipelineTask)
   })
 
   ipcMain.handle('pipeline:remove-task', async (_event, pipelineId: string, taskName: string) => {
@@ -245,11 +248,11 @@ const setupIpcHandlers = (window: BrowserWindow) => {
     return pipelineManager.removeTask(pipelineId, taskName)
   })
 
-  ipcMain.handle('pipeline:update-task', async (_event, pipelineId: string, taskName: string, updates: any) => {
+  ipcMain.handle('pipeline:update-task', async (_event, pipelineId: string, taskName: string, updates: unknown) => {
     if (!pipelineManager) {
       throw new Error('저장소가 설정되지 않았습니다.')
     }
-    return pipelineManager.updateTask(pipelineId, taskName, updates)
+    return pipelineManager.updateTask(pipelineId, taskName, updates as Partial<PipelineTask>)
   })
 
   // Validation & Info
@@ -271,33 +274,33 @@ const setupIpcHandlers = (window: BrowserWindow) => {
   })
 
   // Task CRUD - CrawlTask
-  ipcMain.handle('task:create-crawl', async (_event, dto: any) => {
+  ipcMain.handle('task:create-crawl', async (_event, dto: unknown) => {
     if (!taskManager) {
       throw new Error('저장소가 설정되지 않았습니다.')
     }
-    return taskManager.createCrawlTask(dto)
+    return taskManager.createCrawlTask(dto as CreateCrawlTaskDTO)
   })
 
-  ipcMain.handle('task:update-crawl', async (_event, id: string, updates: any) => {
+  ipcMain.handle('task:update-crawl', async (_event, id: string, updates: unknown) => {
     if (!taskManager) {
       throw new Error('저장소가 설정되지 않았습니다.')
     }
-    return taskManager.updateCrawlTask(id, updates)
+    return taskManager.updateCrawlTask(id, updates as Partial<CreateCrawlTaskDTO>)
   })
 
   // Task CRUD - ActionTask
-  ipcMain.handle('task:create-action', async (_event, dto: any) => {
+  ipcMain.handle('task:create-action', async (_event, dto: unknown) => {
     if (!taskManager) {
       throw new Error('저장소가 설정되지 않았습니다.')
     }
-    return taskManager.createActionTask(dto)
+    return taskManager.createActionTask(dto as CreateActionTaskDTO)
   })
 
-  ipcMain.handle('task:update-action', async (_event, id: string, updates: any) => {
+  ipcMain.handle('task:update-action', async (_event, id: string, updates: unknown) => {
     if (!taskManager) {
       throw new Error('저장소가 설정되지 않았습니다.')
     }
-    return taskManager.updateActionTask(id, updates)
+    return taskManager.updateActionTask(id, updates as Partial<CreateActionTaskDTO>)
   })
 
   // Task 조회
@@ -361,18 +364,18 @@ const setupIpcHandlers = (window: BrowserWindow) => {
   })
 
   // Task 검증
-  ipcMain.handle('task:validate-crawl', async (_event, task: any) => {
+  ipcMain.handle('task:validate-crawl', async (_event, task: unknown) => {
     if (!taskManager) {
       return { valid: false, errors: ['저장소가 설정되지 않았습니다.'], warnings: [] }
     }
-    return taskManager.validateCrawlTask(task)
+    return taskManager.validateCrawlTask(task as CrawlTask)
   })
 
-  ipcMain.handle('task:validate-action', async (_event, task: any) => {
+  ipcMain.handle('task:validate-action', async (_event, task: unknown) => {
     if (!taskManager) {
       return { valid: false, errors: ['저장소가 설정되지 않았습니다.'], warnings: [] }
     }
-    return taskManager.validateActionTask(task)
+    return taskManager.validateActionTask(task as ActionTask)
   })
 }
 

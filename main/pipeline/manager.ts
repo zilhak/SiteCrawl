@@ -256,9 +256,10 @@ export class PipelineManager {
     // 최대 깊이 계산 (DFS)
     let maxDepth = 0
     if (root) {
-      const calculateDepth = (node: any, depth: number): void => {
+      const calculateDepth = (node: unknown, depth: number): void => {
+        const n = node as any
         maxDepth = Math.max(maxDepth, depth)
-        for (const child of node.children) {
+        for (const child of n.children) {
           calculateDepth(child, depth + 1)
         }
       }

@@ -199,15 +199,16 @@ export class TaskDatabase {
   }
 
   // DB 행을 Task 객체로 변환
-  private rowToTask(row: any): AnyTask {
+  private rowToTask(row: unknown): AnyTask {
+    const r = row as any
     const baseTask = {
-      id: row.id,
-      name: row.name,
-      description: row.description,
-      category: row.category,
-      config: JSON.parse(row.config),
-      createdAt: row.created_at,
-      updatedAt: row.updated_at
+      id: r.id,
+      name: r.name,
+      description: r.description,
+      category: r.category,
+      config: JSON.parse(r.config),
+      createdAt: r.created_at,
+      updatedAt: r.updated_at
     }
 
     return baseTask as AnyTask

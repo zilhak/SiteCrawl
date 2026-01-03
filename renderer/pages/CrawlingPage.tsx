@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   Box,
   Typography,
@@ -8,11 +8,9 @@ import {
   Alert,
   Stack,
   Card,
-  CardContent,
   CardMedia,
   Link,
   Autocomplete,
-  Chip,
   IconButton
 } from '@mui/material'
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
@@ -36,15 +34,6 @@ export default function CrawlingPage({ options, isStorageActive }: CrawlingPageP
 
   const [pipelines, setPipelines] = useState<Pipeline[]>([])
   const [selectedPipeline, setSelectedPipeline] = useState<Pipeline | null>(null)
-
-  const loadPipelines = async () => {
-    try {
-      const allPipelines = await pipelineService.getAll()
-      setPipelines(allPipelines)
-    } catch (err) {
-      console.error('파이프라인 로드 실패:', err)
-    }
-  }
 
   const startCrawl = async () => {
     if (!url || isLoading) return
@@ -76,7 +65,7 @@ export default function CrawlingPage({ options, isStorageActive }: CrawlingPageP
   }
 
   useEffect(() => {
-    crawlerService.onProgress((data: any) => {
+    crawlerService.onProgress((data: unknown) => {
       setProgress(data.message)
     })
 
@@ -92,7 +81,16 @@ export default function CrawlingPage({ options, isStorageActive }: CrawlingPageP
       setError(errorMsg)
     })
 
-    loadPipelines()
+    const loadPipelines = async () => {
+      try {
+        const allPipelines = await pipelineService.getAll()
+        setPipelines(allPipelines)
+      } catch (err) {
+        console.warn('파이프라인 로드 실패 (Electron 환경 필요):', err)
+      }
+    }
+
+    void loadPipelines()
   }, [])
 
   return (

@@ -20,6 +20,7 @@ import {
   Paper,
   List,
   ListItem,
+  ListItemButton,
   ListItemText,
   ListItemSecondaryAction,
   Chip,
@@ -178,6 +179,7 @@ export default function SettingsPage({
                   variant="outlined"
                   startIcon={<FolderOpenIcon />}
                   onClick={handleSelectPath}
+                  sx={{ width: '150px' }}
                 >
                   경로 선택
                 </Button>
@@ -317,8 +319,6 @@ export default function SettingsPage({
                   {Object.keys(options.domainSettings).map((domain) => (
                     <ListItem
                       key={domain}
-                      button
-                      selected={selectedDomain === domain}
                       onClick={() => setSelectedDomain(domain)}
                     >
                       <ListItemText

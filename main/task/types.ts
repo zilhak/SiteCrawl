@@ -19,6 +19,8 @@ export interface CrawlTask extends Task {
     type: 'blacklist' | 'whitelist'
     patterns: string[]  // regex 패턴
     limit: number       // -1이면 무제한
+    includeAbsolutePaths: boolean  // 절대경로 포함 여부
+    includeRelativePaths: boolean  // 상대경로 포함 여부
   }
 }
 
@@ -39,6 +41,8 @@ export interface CreateCrawlTaskDTO {
   name: string
   description?: string
   type: 'blacklist' | 'whitelist'
+  includeAbsolutePaths?: boolean
+  includeRelativePaths?: boolean
   patterns: string[]
   limit: number
 }

@@ -1,12 +1,12 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
 contextBridge.exposeInMainWorld('crawler', {
-  startCrawl: (url: string, useSession?: boolean, options?: any) =>
+  startCrawl: (url: string, useSession?: boolean, options?: unknown) =>
     ipcRenderer.invoke('crawler:start', url, useSession, options),
-  onProgress: (callback: (data: any) => void) => {
+  onProgress: (callback: (data: unknown) => void) => {
     ipcRenderer.on('crawler:progress', (_event, data) => callback(data))
   },
-  onComplete: (callback: (data: any) => void) => {
+  onComplete: (callback: (data: unknown) => void) => {
     ipcRenderer.on('crawler:complete', (_event, data) => callback(data))
   },
   onError: (callback: (error: string) => void) => {
@@ -32,7 +32,7 @@ contextBridge.exposeInMainWorld('pipeline', {
   // Pipeline CRUD
   create: (name: string, description?: string) =>
     ipcRenderer.invoke('pipeline:create', name, description),
-  save: (pipeline: any) =>
+  save: (pipeline: unknown) =>
     ipcRenderer.invoke('pipeline:save', pipeline),
   get: (id: string) =>
     ipcRenderer.invoke('pipeline:get', id),
@@ -44,11 +44,11 @@ contextBridge.exposeInMainWorld('pipeline', {
     ipcRenderer.invoke('pipeline:delete', id),
 
   // Task Management
-  addTask: (pipelineId: string, task: any) =>
+  addTask: (pipelineId: string, task: unknown) =>
     ipcRenderer.invoke('pipeline:add-task', pipelineId, task),
   removeTask: (pipelineId: string, taskName: string) =>
     ipcRenderer.invoke('pipeline:remove-task', pipelineId, taskName),
-  updateTask: (pipelineId: string, taskName: string, updates: any) =>
+  updateTask: (pipelineId: string, taskName: string, updates: unknown) =>
     ipcRenderer.invoke('pipeline:update-task', pipelineId, taskName, updates),
 
   // Validation & Info
@@ -62,15 +62,15 @@ contextBridge.exposeInMainWorld('pipeline', {
 
 contextBridge.exposeInMainWorld('task', {
   // CrawlTask
-  createCrawl: (dto: any) =>
+  createCrawl: (dto: unknown) =>
     ipcRenderer.invoke('task:create-crawl', dto),
-  updateCrawl: (id: string, updates: any) =>
+  updateCrawl: (id: string, updates: unknown) =>
     ipcRenderer.invoke('task:update-crawl', id, updates),
 
   // ActionTask
-  createAction: (dto: any) =>
+  createAction: (dto: unknown) =>
     ipcRenderer.invoke('task:create-action', dto),
-  updateAction: (id: string, updates: any) =>
+  updateAction: (id: string, updates: unknown) =>
     ipcRenderer.invoke('task:update-action', id, updates),
 
   // 조회
@@ -102,8 +102,8 @@ contextBridge.exposeInMainWorld('task', {
     ipcRenderer.invoke('task:get-paginated', category, page, pageSize),
 
   // 검증
-  validateCrawl: (task: any) =>
+  validateCrawl: (task: unknown) =>
     ipcRenderer.invoke('task:validate-crawl', task),
-  validateAction: (task: any) =>
+  validateAction: (task: unknown) =>
     ipcRenderer.invoke('task:validate-action', task)
 })

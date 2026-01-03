@@ -46,7 +46,9 @@ export class TaskManager {
       config: {
         type: dto.type,
         patterns: dto.patterns,
-        limit: dto.limit
+        limit: dto.limit,
+        includeAbsolutePaths: dto.includeAbsolutePaths ?? true,
+        includeRelativePaths: dto.includeRelativePaths ?? true
       },
       createdAt: now,
       updatedAt: now
@@ -96,7 +98,9 @@ export class TaskManager {
       config: {
         type: updates.type ?? (task as CrawlTask).config.type,
         patterns: updates.patterns ?? (task as CrawlTask).config.patterns,
-        limit: updates.limit ?? (task as CrawlTask).config.limit
+        limit: updates.limit ?? (task as CrawlTask).config.limit,
+        includeAbsolutePaths: updates.includeAbsolutePaths ?? (task as CrawlTask).config.includeAbsolutePaths ?? true,
+        includeRelativePaths: updates.includeRelativePaths ?? (task as CrawlTask).config.includeRelativePaths ?? true,
       },
       updatedAt: Date.now()
     }
@@ -174,6 +178,8 @@ export class TaskManager {
       category: 'crawl',
       config: {
         type: 'whitelist',
+        includeAbsolutePaths: true,
+        includeRelativePaths: true,
         patterns: [],
         limit: -1
       },

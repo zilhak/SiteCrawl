@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import {
   Box,
   Typography,
@@ -32,7 +32,7 @@ export default function ActionTaskPage({ isStorageActive }: ActionTaskPageProps)
   const [rowsPerPage] = useState(20)
   const [selected, setSelected] = useState<Set<string>>(new Set())
 
-  const loadTasks = async (pageNum: number = 0) => {
+  const loadTasks = useCallback(async (pageNum: number = 0) => {
     try {
       const result = await taskService.getTasksPaginated('action', pageNum + 1, rowsPerPage)
       setTasks(result.tasks as ActionTask[])
@@ -40,13 +40,13 @@ export default function ActionTaskPage({ isStorageActive }: ActionTaskPageProps)
     } catch (err) {
       console.error('ActionTask 로드 실패:', err)
     }
-  }
+  }, [rowsPerPage])
 
   const handleAddTask = async () => {
     try {
       await taskService.createQuickAction()
       await loadTasks(page)
-    } catch (err: any) {
+    } catch (err: unknown) {
       alert(`Task 생성 실패: ${err.message}`)
     }
   }
@@ -65,7 +65,7 @@ export default function ActionTaskPage({ isStorageActive }: ActionTaskPageProps)
       alert(`${deleted}개의 Task가 삭제되었습니다.`)
       setSelected(new Set())
       await loadTasks(page)
-    } catch (err: any) {
+    } catch (err: unknown) {
       alert(`Task 삭제 실패: ${err.message}`)
     }
   }
@@ -99,9 +99,9 @@ export default function ActionTaskPage({ isStorageActive }: ActionTaskPageProps)
 
   useEffect(() => {
     if (isStorageActive) {
-      loadTasks(0)
+      void loadTasks(0)
     }
-  }, [isStorageActive])
+  }, [isStorageActive, loadTasks])
 
   if (!isStorageActive) {
     return (

@@ -76,6 +76,8 @@ export interface CrawlTask extends Task {
     type: 'blacklist' | 'whitelist'
     patterns: string[]
     limit: number
+    includeAbsolutePaths: boolean
+    includeRelativePaths: boolean
   }
 }
 
@@ -93,6 +95,8 @@ export interface CreateCrawlTaskDTO {
   name: string
   description?: string
   type: 'blacklist' | 'whitelist'
+  includeAbsolutePaths?: boolean
+  includeRelativePaths?: boolean
   patterns: string[]
   limit: number
 }
@@ -122,7 +126,7 @@ declare global {
   interface Window {
     crawler: {
       startCrawl: (url: string, useSession?: boolean, options?: CrawlOptions) => Promise<CrawlResult>
-      onProgress: (callback: (data: any) => void) => void
+      onProgress: (callback: (data: unknown) => void) => void
       onComplete: (callback: (data: CrawlResult) => void) => void
       onError: (callback: (error: string) => void) => void
     }

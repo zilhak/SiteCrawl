@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import {
   Box,
   Typography,
@@ -54,8 +54,10 @@ export default function CrawlTaskPage({ isStorageActive }: CrawlTaskPageProps) {
   const [editLimit, setEditLimit] = useState<number>(-1)
   const [editPatterns, setEditPatterns] = useState<string[]>([])
   const [newPattern, setNewPattern] = useState('')
+  const [editIncludeAbsolute, setEditIncludeAbsolute] = useState<boolean>(true)
+  const [editIncludeRelative, setEditIncludeRelative] = useState<boolean>(true)
 
-  const loadTasks = async (pageNum: number = 0) => {
+  const loadTasks = useCallback(async (pageNum: number = 0) => {
     try {
       const result = await taskService.getTasksPaginated('crawl', pageNum + 1, rowsPerPage)
       setTasks(result.tasks as CrawlTask[])
@@ -63,13 +65,13 @@ export default function CrawlTaskPage({ isStorageActive }: CrawlTaskPageProps) {
     } catch (err) {
       console.error('CrawlTask 로드 실패:', err)
     }
-  }
+  }, [rowsPerPage])
 
   const handleAddTask = async () => {
     try {
       await taskService.createQuickCrawl()
       await loadTasks(page)
-    } catch (err: any) {
+    } catch (err: unknown) {
       alert(`Task 생성 실패: ${err.message}`)
     }
   }
@@ -88,7 +90,7 @@ export default function CrawlTaskPage({ isStorageActive }: CrawlTaskPageProps) {
       alert(`${deleted}개의 Task가 삭제되었습니다.`)
       setSelected(new Set())
       await loadTasks(page)
-    } catch (err: any) {
+    } catch (err: unknown) {
       alert(`Task 삭제 실패: ${err.message}`)
     }
   }
@@ -123,6 +125,8 @@ export default function CrawlTaskPage({ isStorageActive }: CrawlTaskPageProps) {
     setEditLimit(task.config.limit)
     setEditPatterns([...task.config.patterns])
     setNewPattern('')
+    setEditIncludeAbsolute(task.config.includeAbsolutePaths ?? true)
+    setEditIncludeRelative(task.config.includeRelativePaths ?? true)
   }
 
   const handleCloseEdit = () => {
@@ -137,11 +141,13 @@ export default function CrawlTaskPage({ isStorageActive }: CrawlTaskPageProps) {
         name: editName,
         type: editType,
         patterns: editPatterns,
-        limit: editLimit
+        limit: editLimit,
+        includeAbsolutePaths: editIncludeAbsolute,
+        includeRelativePaths: editIncludeRelative
       })
       await loadTasks(page)
       handleCloseEdit()
-    } catch (err: any) {
+    } catch (err: unknown) {
       alert(`Task 수정 실패: ${err.message}`)
     }
   }
@@ -166,9 +172,9 @@ export default function CrawlTaskPage({ isStorageActive }: CrawlTaskPageProps) {
 
   useEffect(() => {
     if (isStorageActive) {
-      loadTasks(0)
+      void loadTasks(0)
     }
-  }, [isStorageActive])
+  }, [isStorageActive, loadTasks])
 
   if (!isStorageActive) {
     return (
@@ -362,6 +368,31 @@ export default function CrawlTaskPage({ isStorageActive }: CrawlTaskPageProps) {
               value={editLimit}
               onChange={(e) => setEditLimit(parseInt(e.target.value) || -1)}
             />
+
+            {/* 경로 포함 옵션 */}
+            <Box>
+              <Typography variant="subtitle2" gutterBottom>
+                URL 경로 타입
+              </Typography>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={editIncludeAbsolute}
+                    onChange={(e) => setEditIncludeAbsolute(e.target.checked)}
+                  />
+                }
+                label="절대경로 포함 (http://..., https://...)"
+              />
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={editIncludeRelative}
+                    onChange={(e) => setEditIncludeRelative(e.target.checked)}
+                  />
+                }
+                label="상대경로 포함 (/page, ../image.png 등)"
+              />
+            </Box>
 
             {/* 패턴 목록 */}
             <Box>

@@ -65,12 +65,6 @@ function App() {
   const [showPipelineEditor, setShowPipelineEditor] = useState(false)
   const [pipelineRefreshKey, setPipelineRefreshKey] = useState(0)
 
-  // 저장소 상태 확인
-  const checkStorageStatus = async () => {
-    const active = await storageService.isActive()
-    setIsStorageActive(active)
-  }
-
   const handleEditPipeline = (pipelineId: string | null) => {
     setEditingPipelineId(pipelineId)
     setShowPipelineEditor(true)
@@ -82,8 +76,14 @@ function App() {
     setPipelineRefreshKey(prev => prev + 1)
   }
 
+  // 저장소 상태 확인
   useEffect(() => {
-    checkStorageStatus()
+    const checkStorageStatus = async () => {
+      const active = await storageService.isActive()
+      setIsStorageActive(active)
+    }
+
+    void checkStorageStatus()
   }, [storagePath])
 
   // 파이프라인 편집 화면

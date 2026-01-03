@@ -38,7 +38,7 @@ import ReactFlow, {
   Position
 } from 'reactflow'
 import 'reactflow/dist/style.css'
-import type { Pipeline, AnyTask, CrawlTask, ActionTask } from '../types'
+import type { Pipeline, PipelineTask, AnyTask, CrawlTask, ActionTask } from '../types'
 import { pipelineService } from '../services/pipelineService'
 import { taskService } from '../services/taskService'
 
@@ -74,7 +74,7 @@ function TaskNode({ data }: { data: TaskNodeData }) {
         sx={{
           px: 3,
           py: 1.5,
-          minWidth: 140,
+          width: 200,
           textAlign: 'center',
           bgcolor: data.isRoot ? 'primary.main' : 'background.paper',
           color: data.isRoot ? 'white' : 'text.primary',
@@ -547,9 +547,9 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
           }
         }
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('파이프라인 저장 실패:', err)
-      alert(`파이프라인 저장 실패: ${err.message}`)
+      alert(`파이프라인 저장 실패: ${err instanceof Error ? err.message : '알 수 없는 오류'}`)
     }
   }
 
@@ -603,6 +603,9 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           nodeTypes={nodeTypes}
+          nodesDraggable={false}
+          nodesConnectable={false}
+          elementsSelectable={false}
           fitView
           minZoom={0.5}
           maxZoom={1.5}

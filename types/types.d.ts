@@ -1,3 +1,5 @@
+import type { Settings } from './interface/settings'
+
 declare global {
   interface Window {
     electronAPI: {

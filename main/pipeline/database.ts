@@ -237,7 +237,7 @@ export class PipelineDatabase {
   /**
    * Pipeline의 실행 히스토리 조회
    */
-  getExecutionHistory(pipelineId: string, limit: number = 10): any[] {
+  getExecutionHistory(pipelineId: string, limit: number = 10): unknown[] {
     if (!this.db) return []
 
     const stmt = this.db.prepare(`

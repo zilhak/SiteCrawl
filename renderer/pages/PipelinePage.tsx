@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import {
   Box,
   Typography,
@@ -26,14 +26,14 @@ interface PipelinePageProps {
 export default function PipelinePage({ isStorageActive, onEditPipeline, refreshKey }: PipelinePageProps) {
   const [pipelines, setPipelines] = useState<Pipeline[]>([])
 
-  const loadPipelines = async () => {
+  const loadPipelines = useCallback(async () => {
     try {
       const allPipelines = await pipelineService.getAll()
       setPipelines(allPipelines)
     } catch (err) {
       console.error('파이프라인 로드 실패:', err)
     }
-  }
+  }, [])
 
   const handleDelete = async (id: string, name: string) => {
     if (!confirm(`"${name}" 파이프라인을 삭제하시겠습니까?`)) return
@@ -46,7 +46,7 @@ export default function PipelinePage({ isStorageActive, onEditPipeline, refreshK
       } else {
         alert('파이프라인 삭제에 실패했습니다.')
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       alert(`파이프라인 삭제 실패: ${err.message}`)
     }
   }
@@ -57,9 +57,9 @@ export default function PipelinePage({ isStorageActive, onEditPipeline, refreshK
 
   useEffect(() => {
     if (isStorageActive) {
-      loadPipelines()
+      void loadPipelines()
     }
-  }, [isStorageActive, refreshKey])
+  }, [isStorageActive, refreshKey, loadPipelines])
 
   if (!isStorageActive) {
     return (
