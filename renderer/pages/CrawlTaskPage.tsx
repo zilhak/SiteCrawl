@@ -136,6 +136,25 @@ export default function CrawlTaskPage({ isStorageActive }: CrawlTaskPageProps) {
   const handleSaveEdit = async () => {
     if (!editingTask) return
 
+    // 낙관적 업데이트: UI 즉시 반영
+    const updatedTask: CrawlTask = {
+      ...editingTask,
+      name: editName,
+      config: {
+        type: editType,
+        patterns: editPatterns,
+        limit: editLimit,
+        includeAbsolutePaths: editIncludeAbsolute,
+        includeRelativePaths: editIncludeRelative
+      },
+      updatedAt: Date.now()
+    }
+
+    // UI 즉시 업데이트
+    setTasks(prev => prev.map(t => t.id === editingTask.id ? updatedTask : t))
+    handleCloseEdit()
+
+    // 백그라운드에서 DB 저장
     try {
       await taskService.updateCrawl(editingTask.id, {
         name: editName,
@@ -145,10 +164,10 @@ export default function CrawlTaskPage({ isStorageActive }: CrawlTaskPageProps) {
         includeAbsolutePaths: editIncludeAbsolute,
         includeRelativePaths: editIncludeRelative
       })
-      await loadTasks(page)
-      handleCloseEdit()
     } catch (err: unknown) {
       alert(`Task 수정 실패: ${err.message}`)
+      // 실패 시 데이터 다시 로드하여 롤백
+      await loadTasks(page)
     }
   }
 

@@ -9,8 +9,7 @@ import {
   Box,
   Container,
   CssBaseline,
-  ThemeProvider,
-  createTheme
+  ThemeProvider
 } from '@mui/material'
 import SettingsIcon from '@mui/icons-material/Settings'
 import BuildIcon from '@mui/icons-material/Build'
@@ -28,20 +27,7 @@ import SettingsPage from './pages/SettingsPage'
 
 import type { CrawlOptions } from './types'
 import { storageService } from './services/storageService'
-
-const theme = createTheme({
-  palette: {
-    primary: {
-      main: '#667eea'
-    },
-    secondary: {
-      main: '#764ba2'
-    }
-  },
-  typography: {
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
-  }
-})
+import { theme } from './styles'
 
 function App() {
   // 모드 상태 (크롤링 vs 파이프라인 설정)

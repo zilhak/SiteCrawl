@@ -68,8 +68,8 @@ export class TaskManager {
       description: dto.description,
       category: 'action',
       config: {
-        action: dto.action,
-        resultName: dto.resultName
+        type: dto.type,
+        path: dto.path
       },
       createdAt: now,
       updatedAt: now
@@ -125,8 +125,8 @@ export class TaskManager {
       name: updates.name ?? task.name,
       description: updates.description ?? task.description,
       config: {
-        action: updates.action ?? (task as ActionTask).config.action,
-        resultName: updates.resultName ?? (task as ActionTask).config.resultName
+        type: updates.type ?? (task as ActionTask).config.type,
+        path: updates.path ?? (task as ActionTask).config.path
       },
       updatedAt: Date.now()
     }
@@ -202,8 +202,8 @@ export class TaskManager {
       description: '',
       category: 'action',
       config: {
-        action: '',
-        resultName: ''
+        type: 'store',
+        path: ''
       },
       createdAt: now,
       updatedAt: now
@@ -267,25 +267,33 @@ export class TaskManager {
       errors.push('Task 이름은 필수입니다.')
     }
 
-    // Action 검증
-    if (!task.config.action || task.config.action.trim().length === 0) {
-      errors.push('Action은 필수입니다.')
-    }
+    // Action 타입별 검증
+    switch (task.config.type) {
+      case 'store':
+        // Path 검증
+        if (!task.config.path || task.config.path.trim().length === 0) {
+          errors.push('저장 경로(path)는 필수입니다.')
+        } else {
+          // 경로 문자 검증 (위험한 문자 체크)
+          const invalidChars = /[<>:"|?*]/
+          if (invalidChars.test(task.config.path)) {
+            errors.push('저장 경로에 유효하지 않은 문자가 포함되어 있습니다.')
+          }
 
-    // ResultName 검증
-    if (!task.config.resultName || task.config.resultName.trim().length === 0) {
-      errors.push('Result name은 필수입니다.')
-    } else {
-      // 경로 문자 검증 (위험한 문자 체크)
-      const invalidChars = /[<>:"|?*]/
-      if (invalidChars.test(task.config.resultName)) {
-        errors.push('Result name에 유효하지 않은 문자가 포함되어 있습니다.')
-      }
+          // 상위 디렉토리 참조 확인
+          if (task.config.path.includes('..')) {
+            errors.push('저장 경로에 상위 디렉토리 참조(..)를 사용할 수 없습니다.')
+          }
 
-      // 상대 경로 확인
-      if (task.config.resultName.includes('..')) {
-        errors.push('Result name에 상위 디렉토리 참조(..)를 사용할 수 없습니다.')
-      }
+          // 절대 경로 확인 (상대 경로만 허용)
+          if (task.config.path.startsWith('/') || task.config.path.match(/^[a-zA-Z]:\\/)) {
+            errors.push('저장 경로는 상대 경로만 허용됩니다.')
+          }
+        }
+        break
+
+      default:
+        errors.push(`알 수 없는 액션 타입: ${task.config.type}`)
     }
 
     return {

@@ -24,13 +24,22 @@ export interface CrawlTask extends Task {
   }
 }
 
+// Action 타입 정의
+export type ActionType = 'store'
+
+// Action별 설정
+export interface StoreActionConfig {
+  type: 'store'
+  path: string  // 저장 경로 (store/ 하위 경로, 예: "images", "documents/pdf")
+}
+
+// ActionConfig 유니온 타입
+export type ActionConfig = StoreActionConfig
+
 // ActionTask - 실제 작업 수행
 export interface ActionTask extends Task {
   category: 'action'
-  config: {
-    action: string      // 액션 종류 (미정)
-    resultName: string  // 결과 저장 폴더명 (상대경로)
-  }
+  config: ActionConfig
 }
 
 // Task 유니온 타입
@@ -50,8 +59,8 @@ export interface CreateCrawlTaskDTO {
 export interface CreateActionTaskDTO {
   name: string
   description?: string
-  action: string
-  resultName: string
+  type: ActionType
+  path: string
 }
 
 // Task 검증 결과

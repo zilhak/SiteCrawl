@@ -416,7 +416,7 @@ export default function SettingsPage({
                   </Stack>
 
                   {options.domainSettings[selectedDomain].patterns.length === 0 ? (
-                    <Box sx={{ textAlign: 'center', py: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+                    <Box sx={{ textAlign: 'center', py: 2, bgcolor: 'background.paper', borderRadius: 1 }}>
                       <Typography variant="body2" color="text.secondary">
                         패턴이 없습니다. 패턴을 추가하세요.
                       </Typography>

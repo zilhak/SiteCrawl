@@ -45,26 +45,39 @@ export class TaskDatabase {
     `)
   }
 
-  // Task 저장
+  // Task 저장 (최적화: 신규/업데이트 분리)
   saveTask(task: AnyTask): void {
-    const stmt = this.db.prepare(`
-      INSERT OR REPLACE INTO tasks (id, name, description, category, config, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `)
+    // 기존 Task 확인
+    const existing = this.db.prepare(`SELECT id FROM tasks WHERE id = ?`).get(task.id)
 
-    stmt.run(
-      task.id,
-      task.name,
-      task.description || null,
-      task.category,
-      JSON.stringify(task.config),
-      task.createdAt,
-      task.updatedAt
-    )
+    if (existing) {
+      // 업데이트: task_order 조회 스킵
+      this.db.prepare(`
+        UPDATE tasks
+        SET name = ?, description = ?, config = ?, updated_at = ?
+        WHERE id = ?
+      `).run(
+        task.name,
+        task.description || null,
+        JSON.stringify(task.config),
+        task.updatedAt,
+        task.id
+      )
+    } else {
+      // 신규 생성: INSERT + task_order 추가
+      this.db.prepare(`
+        INSERT INTO tasks (id, name, description, category, config, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        task.id,
+        task.name,
+        task.description || null,
+        task.category,
+        JSON.stringify(task.config),
+        task.createdAt,
+        task.updatedAt
+      )
 
-    // task_order에 없으면 추가 (새 task인 경우)
-    const orderCheck = this.db.prepare(`SELECT task_id FROM task_order WHERE task_id = ?`).get(task.id)
-    if (!orderCheck) {
       const maxOrder = this.db.prepare(`
         SELECT COALESCE(MAX(order_index), -1) as max_order
         FROM task_order

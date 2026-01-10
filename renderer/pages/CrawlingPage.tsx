@@ -222,7 +222,7 @@ export default function CrawlingPage({ options, isStorageActive }: CrawlingPageP
                   component="img"
                   image={result.screenshot}
                   alt="Screenshot"
-                  sx={{ maxHeight: 600, objectFit: 'contain', bgcolor: 'grey.100' }}
+                  sx={{ maxHeight: 600, objectFit: 'contain', bgcolor: 'background.default' }}
                 />
               </Card>
             </Box>
@@ -262,7 +262,7 @@ export default function CrawlingPage({ options, isStorageActive }: CrawlingPageP
           </Stack>
         </Paper>
       ) : !isLoading ? (
-        <Paper sx={{ p: 8, textAlign: 'center', bgcolor: 'grey.50' }}>
+        <Paper sx={{ p: 8, textAlign: 'center' }}>
           <SearchIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
           <Typography variant="h6" color="text.secondary">
             URL을 입력하고 크롤링을 시작하세요

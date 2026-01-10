@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "main": "dist-electron/main.js",
   "scripts": {
+    "dev": "concurrently \"pnpm run dev:vite\" \"pnpm run dev:electron\"",
     "dev:vite": "vite",
     "dev:electron": "npx wait-on http://localhost:5173 && electron .",
     "build": "npm run build:vite && npm run build:electron",

@@ -41,6 +41,7 @@ import 'reactflow/dist/style.css'
 import type { Pipeline, PipelineTask, AnyTask, CrawlTask, ActionTask } from '../types'
 import { pipelineService } from '../services/pipelineService'
 import { taskService } from '../services/taskService'
+import { colors } from '../styles'
 
 interface PipelineEditorPageProps {
   pipelineId: string | null
@@ -95,7 +96,7 @@ function TaskNode({ data }: { data: TaskNodeData }) {
               sx={{
                 height: 18,
                 fontSize: '10px',
-                bgcolor: data.isRoot ? 'rgba(255,255,255,0.3)' : undefined,
+                bgcolor: data.isRoot ? colors.overlay.light : undefined,
                 color: data.isRoot ? 'white' : undefined
               }}
             />
@@ -177,13 +178,11 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
 
   const [selectingParentId, setSelectingParentId] = useState<string | null>(null)
   const [availableTasks, setAvailableTasks] = useState<AnyTask[]>([])
-  const [showTaskSelector, setShowTaskSelector] = useState(false)
   const [nodeCounter, setNodeCounter] = useState(0)
 
   // Task selector filters
   const [searchQuery, setSearchQuery] = useState('')
   const [categoryFilter, setCategoryFilter] = useState<'all' | 'crawl' | 'action'>('all')
-  const [crawlTypeFilter, setCrawlTypeFilter] = useState<'all' | 'whitelist' | 'blacklist'>('all')
 
   // Pipeline item naming
   const [selectedTask, setSelectedTask] = useState<AnyTask | null>(null)
@@ -453,7 +452,8 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
   }
 
   // Filter tasks based on search and filters
-  const getFilteredTasks = () => {
+  // Filtered tasks based on search and category
+  const filteredTasks = useMemo(() => {
     return availableTasks.filter(task => {
       // Search filter
       if (searchQuery && !task.name.toLowerCase().includes(searchQuery.toLowerCase())) {
@@ -465,17 +465,9 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
         return false
       }
 
-      // Crawl type filter (only for crawl tasks)
-      if (crawlTypeFilter !== 'all' && task.category === 'crawl') {
-        const crawlTask = task as CrawlTask
-        if (crawlTask.config.type !== crawlTypeFilter) {
-          return false
-        }
-      }
-
       return true
     })
-  }
+  }, [availableTasks, searchQuery, categoryFilter])
 
   const handleSave = async () => {
     if (!pipelineName.trim()) {
@@ -595,24 +587,152 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
         </Toolbar>
       </AppBar>
 
-      {/* React Flow Canvas */}
-      <Box sx={{ flex: 1, bgcolor: 'grey.50' }}>
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          nodeTypes={nodeTypes}
-          nodesDraggable={false}
-          nodesConnectable={false}
-          elementsSelectable={false}
-          fitView
-          minZoom={0.5}
-          maxZoom={1.5}
-          defaultViewport={{ x: 0, y: 0, zoom: 1 }}
-        >
-          {/* Optional: Add Background, Controls, MiniMap */}
-        </ReactFlow>
+      {/* Main Content - Split Layout */}
+      <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+        {/* Left: React Flow Canvas (60%) */}
+        <Box sx={{ width: '60%', bgcolor: 'background.default', position: 'relative' }}>
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            nodeTypes={nodeTypes}
+            nodesDraggable={false}
+            nodesConnectable={false}
+            elementsSelectable={false}
+            fitView
+            minZoom={0.5}
+            maxZoom={1.5}
+            defaultViewport={{ x: 0, y: 0, zoom: 1 }}
+          >
+            {/* Optional: Add Background, Controls, MiniMap */}
+          </ReactFlow>
+        </Box>
+
+        {/* Right: Task Selection Panel (40%) */}
+        <Box sx={{
+          width: '40%',
+          bgcolor: 'background.paper',
+          borderLeft: 1,
+          borderColor: 'divider',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden'
+        }}>
+          {/* Panel Header */}
+          <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
+            <Typography variant="h6" gutterBottom>
+              태스크 선택
+            </Typography>
+
+            {/* Search */}
+            <TextField
+              fullWidth
+              size="small"
+              placeholder="태스크 이름 검색..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              sx={{ mb: 2 }}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon />
+                  </InputAdornment>
+                )
+              }}
+            />
+
+            {/* Category Filter */}
+            <Stack direction="row" spacing={1} flexWrap="wrap" gap={1}>
+              <Chip
+                label="전체"
+                size="small"
+                color={categoryFilter === 'all' ? 'primary' : 'default'}
+                onClick={() => setCategoryFilter('all')}
+                sx={{ cursor: 'pointer' }}
+              />
+              <Chip
+                label="URL추출"
+                size="small"
+                color={categoryFilter === 'crawl' ? 'primary' : 'default'}
+                onClick={() => setCategoryFilter('crawl')}
+                sx={{ cursor: 'pointer' }}
+              />
+              <Chip
+                label="작업"
+                size="small"
+                color={categoryFilter === 'action' ? 'primary' : 'default'}
+                onClick={() => setCategoryFilter('action')}
+                sx={{ cursor: 'pointer' }}
+              />
+            </Stack>
+          </Box>
+
+          {/* Task List */}
+          <Box sx={{ flex: 1, overflow: 'auto', p: 2 }}>
+            {filteredTasks.length === 0 ? (
+              <Box sx={{ textAlign: 'center', py: 8 }}>
+                <Typography variant="body2" color="text.secondary" gutterBottom>
+                  {searchQuery || categoryFilter !== 'all'
+                    ? '검색 결과가 없습니다'
+                    : '등록된 태스크가 없습니다'}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  태스크를 먼저 생성해주세요
+                </Typography>
+              </Box>
+            ) : (
+              <List disablePadding>
+                {filteredTasks.map((task) => (
+                  <ListItem key={task.id} disablePadding sx={{ mb: 1 }}>
+                    <ListItemButton
+                      onClick={() => {
+                        setSelectedTask(task)
+                        setShowNameDialog(true)
+                      }}
+                      sx={{
+                        borderRadius: 1,
+                        border: 1,
+                        borderColor: 'divider',
+                        '&:hover': {
+                          borderColor: 'primary.main',
+                          bgcolor: 'action.hover'
+                        }
+                      }}
+                    >
+                      <ListItemText
+                        primary={
+                          <Stack direction="row" spacing={1} alignItems="center">
+                            <Typography variant="body2" fontWeight={500}>
+                              {task.name}
+                            </Typography>
+                            <Chip
+                              label={task.category === 'crawl' ? 'URL추출' : '작업'}
+                              size="small"
+                              color={task.category === 'crawl' ? 'primary' : 'secondary'}
+                            />
+                          </Stack>
+                        }
+                        secondary={
+                          task.category === 'crawl' ? (
+                            <Typography variant="caption" color="text.secondary">
+                              {(task as CrawlTask).config.type === 'whitelist' ? '화이트리스트' : '블랙리스트'} •
+                              {' '}{(task as CrawlTask).config.patterns.length}개 패턴
+                            </Typography>
+                          ) : (
+                            <Typography variant="caption" color="text.secondary">
+                              {(task as ActionTask).actions.length}개 액션
+                            </Typography>
+                          )
+                        }
+                      />
+                    </ListItemButton>
+                  </ListItem>
+                ))}
+              </List>
+            )}
+          </Box>
+        </Box>
       </Box>
 
       {/* Pipeline Item Name Dialog */}
@@ -676,147 +796,6 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
         </DialogActions>
       </Dialog>
 
-      {/* Task Selector Dialog */}
-      <Dialog
-        open={showTaskSelector}
-        onClose={() => setShowTaskSelector(false)}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>태스크 선택</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ mt: 1 }}>
-            {/* Search */}
-            <TextField
-              fullWidth
-              size="small"
-              placeholder="태스크 이름 검색..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchIcon />
-                  </InputAdornment>
-                )
-              }}
-            />
-
-            {/* Category Filter */}
-            <Box>
-              <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
-                카테고리
-              </Typography>
-              <Stack direction="row" spacing={1}>
-                <Chip
-                  label="전체"
-                  size="small"
-                  color={categoryFilter === 'all' ? 'primary' : 'default'}
-                  onClick={() => setCategoryFilter('all')}
-                  sx={{ cursor: 'pointer' }}
-                />
-                <Chip
-                  label="URL추출"
-                  size="small"
-                  color={categoryFilter === 'crawl' ? 'primary' : 'default'}
-                  onClick={() => setCategoryFilter('crawl')}
-                  sx={{ cursor: 'pointer' }}
-                />
-                <Chip
-                  label="작업"
-                  size="small"
-                  color={categoryFilter === 'action' ? 'secondary' : 'default'}
-                  onClick={() => setCategoryFilter('action')}
-                  sx={{ cursor: 'pointer' }}
-                />
-              </Stack>
-            </Box>
-
-            {/* Crawl Type Filter (only show when category is crawl or all) */}
-            {(categoryFilter === 'all' || categoryFilter === 'crawl') && (
-              <Box>
-                <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
-                  URL추출 방식
-                </Typography>
-                <Stack direction="row" spacing={1}>
-                  <Chip
-                    label="전체"
-                    size="small"
-                    color={crawlTypeFilter === 'all' ? 'primary' : 'default'}
-                    onClick={() => setCrawlTypeFilter('all')}
-                    sx={{ cursor: 'pointer' }}
-                  />
-                  <Chip
-                    label="화이트리스트"
-                    size="small"
-                    color={crawlTypeFilter === 'whitelist' ? 'success' : 'default'}
-                    onClick={() => setCrawlTypeFilter('whitelist')}
-                    sx={{ cursor: 'pointer' }}
-                  />
-                  <Chip
-                    label="블랙리스트"
-                    size="small"
-                    color={crawlTypeFilter === 'blacklist' ? 'error' : 'default'}
-                    onClick={() => setCrawlTypeFilter('blacklist')}
-                    sx={{ cursor: 'pointer' }}
-                  />
-                </Stack>
-              </Box>
-            )}
-
-            {/* Task List */}
-            {availableTasks.length === 0 ? (
-              <Typography variant="body2" color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>
-                사용 가능한 태스크가 없습니다.
-                <br />
-                먼저 URL추출 태스크 또는 작업 태스크를 생성하세요.
-              </Typography>
-            ) : (
-              <>
-                {getFilteredTasks().length === 0 ? (
-                  <Typography variant="body2" color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>
-                    검색 결과가 없습니다.
-                  </Typography>
-                ) : (
-                  <Paper variant="outlined" sx={{ maxHeight: 300, overflow: 'auto' }}>
-                    <List disablePadding>
-                      {getFilteredTasks().map((task) => (
-                        <ListItem key={task.id} disablePadding>
-                          <ListItemButton onClick={() => handleSelectTask(task)}>
-                            <ListItemText
-                              primary={task.name}
-                              secondary={
-                                <Stack direction="row" spacing={1} sx={{ mt: 0.5 }}>
-                                  <Chip
-                                    label={task.category === 'crawl' ? 'URL추출' : '작업'}
-                                    size="small"
-                                    color={task.category === 'crawl' ? 'primary' : 'secondary'}
-                                  />
-                                  {task.category === 'crawl' && (
-                                    <Chip
-                                      label={(task as CrawlTask).config.type === 'whitelist' ? '화이트리스트' : '블랙리스트'}
-                                      size="small"
-                                      color={(task as CrawlTask).config.type === 'whitelist' ? 'success' : 'error'}
-                                      variant="outlined"
-                                    />
-                                  )}
-                                </Stack>
-                              }
-                            />
-                          </ListItemButton>
-                        </ListItem>
-                      ))}
-                    </List>
-                  </Paper>
-                )}
-              </>
-            )}
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setShowTaskSelector(false)}>취소</Button>
-        </DialogActions>
-      </Dialog>
     </Box>
   )
 }
