@@ -150,6 +150,7 @@ const setupIpcHandlers = (window: BrowserWindow) => {
   // 저장 경로 설정
   ipcMain.handle('storage:set-path', async (_event, storagePath: string) => {
     try {
+      console.log('[storage:set-path] Setting path:', storagePath)
       historyDB.setDatabasePath(storagePath)
 
       // Pipeline & Task 데이터베이스 초기화
@@ -164,17 +165,21 @@ const setupIpcHandlers = (window: BrowserWindow) => {
 
       // 경로 저장
       appConfig.set('storagePath', storagePath)
+      console.log('[storage:set-path] Path saved to config:', appConfig.get('storagePath'))
 
       return true
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      console.error('[storage:set-path] Error:', errorMessage)
       throw new Error(`저장 경로 설정 실패: ${errorMessage}`)
     }
   })
 
   // 저장된 경로 조회
   ipcMain.handle('storage:get-saved-path', async () => {
-    return appConfig.get('storagePath')
+    const savedPath = appConfig.get('storagePath')
+    console.log('[storage:get-saved-path] Retrieved path:', savedPath)
+    return savedPath
   })
 
   // 저장소 활성화 여부 확인
@@ -391,7 +396,10 @@ const setupIpcHandlers = (window: BrowserWindow) => {
 app.whenReady().then(() => {
   // 저장된 경로가 있으면 자동으로 로드
   const savedPath = appConfig.get('storagePath')
+  console.log('[app.whenReady] Loaded saved path from config:', savedPath)
+
   if (savedPath) {
+    console.log('[app.whenReady] Initializing database with saved path')
     historyDB.setDatabasePath(savedPath)
 
     // Pipeline & Task 데이터베이스 초기화
@@ -403,6 +411,8 @@ app.whenReady().then(() => {
       taskDB = new TaskDatabase(db)
       taskManager = new TaskManager(taskDB)
     }
+  } else {
+    console.log('[app.whenReady] No saved path found')
   }
 
   createWindow()

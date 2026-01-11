@@ -56,8 +56,11 @@ export default function SettingsPage({
   const [newPattern, setNewPattern] = useState('')
 
   const handleSelectPath = async () => {
+    console.log('[SettingsPage] Selecting path...')
     const path = await storageService.selectPath()
+    console.log('[SettingsPage] Selected path:', path)
     if (path) {
+      console.log('[SettingsPage] Calling onStoragePathChange with:', path)
       onStoragePathChange(path)
     }
   }

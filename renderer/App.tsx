@@ -46,6 +46,17 @@ function App() {
   const [storagePath, setStoragePath] = useState('')
   const [isStorageActive, setIsStorageActive] = useState(false)
 
+  // 저장 경로 변경 핸들러
+  const handleStoragePathChange = async (path: string) => {
+    console.log('[App] handleStoragePathChange called with:', path)
+    setStoragePath(path)
+    if (path && path.trim() !== '') {
+      console.log('[App] Calling storageService.setPath')
+      await storageService.setPath(path)
+      console.log('[App] Path saved to backend')
+    }
+  }
+
   // 파이프라인 편집 상태
   const [editingPipelineId, setEditingPipelineId] = useState<string | null>(null)
   const [showPipelineEditor, setShowPipelineEditor] = useState(false)
@@ -65,10 +76,18 @@ function App() {
   // 저장된 경로 자동 로드
   useEffect(() => {
     const loadSavedPath = async () => {
+      console.log('[App] Loading saved path...')
       const savedPath = await storageService.getSavedPath()
-      if (savedPath) {
+      console.log('[App] Saved path from storage:', savedPath)
+
+      // 빈 문자열이 아닌 경우에만 설정
+      if (savedPath && savedPath.trim() !== '') {
+        console.log('[App] Setting storage path:', savedPath)
         setStoragePath(savedPath)
         await storageService.setPath(savedPath)
+        console.log('[App] Storage path set successfully')
+      } else {
+        console.log('[App] No saved path found')
       }
     }
 
@@ -169,7 +188,7 @@ function App() {
           options={options}
           onOptionsChange={setOptions}
           storagePath={storagePath}
-          onStoragePathChange={setStoragePath}
+          onStoragePathChange={handleStoragePathChange}
         />
       </Box>
     </ThemeProvider>
