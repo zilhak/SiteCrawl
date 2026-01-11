@@ -22,5 +22,13 @@ export const storageService = {
       return false
     }
     return window.storage.isActive()
+  },
+
+  async getSavedPath(): Promise<string> {
+    if (!window.storage) {
+      console.warn('Storage API not available. Returning empty string.')
+      return ''
+    }
+    return window.storage.getSavedPath()
   }
 }

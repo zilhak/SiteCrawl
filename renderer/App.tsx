@@ -62,6 +62,19 @@ function App() {
     setPipelineRefreshKey(prev => prev + 1)
   }
 
+  // 저장된 경로 자동 로드
+  useEffect(() => {
+    const loadSavedPath = async () => {
+      const savedPath = await storageService.getSavedPath()
+      if (savedPath) {
+        setStoragePath(savedPath)
+        await storageService.setPath(savedPath)
+      }
+    }
+
+    void loadSavedPath()
+  }, [])
+
   // 저장소 상태 확인
   useEffect(() => {
     const checkStorageStatus = async () => {

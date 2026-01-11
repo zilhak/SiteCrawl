@@ -1,4 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useForm, Controller } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
 import {
   Box,
   Typography,
@@ -36,6 +39,26 @@ import CloseIcon from '@mui/icons-material/Close'
 import type { CrawlTask } from '../types'
 import { taskService } from '../services/taskService'
 
+// Zod 스키마 정의
+const crawlTaskSchema = z.object({
+  name: z.string()
+    .min(1, '이름을 입력해주세요')
+    .max(100, '이름은 100자 이하여야 합니다'),
+  type: z.enum(['blacklist', 'whitelist']),
+  limit: z.number().int(),
+  patterns: z.array(z.string()),
+  includeAbsolutePaths: z.boolean(),
+  includeRelativePaths: z.boolean()
+}).refine(
+  data => data.includeAbsolutePaths || data.includeRelativePaths,
+  {
+    message: '최소 하나의 경로 타입을 선택해야 합니다',
+    path: ['includeRelativePaths']
+  }
+)
+
+type CrawlTaskFormData = z.infer<typeof crawlTaskSchema>
+
 interface CrawlTaskPageProps {
   isStorageActive: boolean
 }
@@ -49,13 +72,22 @@ export default function CrawlTaskPage({ isStorageActive }: CrawlTaskPageProps) {
 
   // 편집 모달 상태
   const [editingTask, setEditingTask] = useState<CrawlTask | null>(null)
-  const [editName, setEditName] = useState('')
-  const [editType, setEditType] = useState<'blacklist' | 'whitelist'>('blacklist')
-  const [editLimit, setEditLimit] = useState<number>(-1)
-  const [editPatterns, setEditPatterns] = useState<string[]>([])
   const [newPattern, setNewPattern] = useState('')
-  const [editIncludeAbsolute, setEditIncludeAbsolute] = useState<boolean>(true)
-  const [editIncludeRelative, setEditIncludeRelative] = useState<boolean>(true)
+
+  // React Hook Form
+  const { register, control, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm<CrawlTaskFormData>({
+    resolver: zodResolver(crawlTaskSchema),
+    defaultValues: {
+      name: '',
+      type: 'blacklist',
+      limit: -1,
+      patterns: [],
+      includeAbsolutePaths: true,
+      includeRelativePaths: true
+    }
+  })
+
+  const patterns = watch('patterns')
 
   const loadTasks = useCallback(async (pageNum: number = 0) => {
     try {
@@ -120,32 +152,35 @@ export default function CrawlTaskPage({ isStorageActive }: CrawlTaskPageProps) {
 
   const handleOpenEdit = (task: CrawlTask) => {
     setEditingTask(task)
-    setEditName(task.name)
-    setEditType(task.config.type)
-    setEditLimit(task.config.limit)
-    setEditPatterns([...task.config.patterns])
+    reset({
+      name: task.name,
+      type: task.config.type,
+      limit: task.config.limit,
+      patterns: [...task.config.patterns],
+      includeAbsolutePaths: task.config.includeAbsolutePaths ?? true,
+      includeRelativePaths: task.config.includeRelativePaths ?? true
+    })
     setNewPattern('')
-    setEditIncludeAbsolute(task.config.includeAbsolutePaths ?? true)
-    setEditIncludeRelative(task.config.includeRelativePaths ?? true)
   }
 
   const handleCloseEdit = () => {
     setEditingTask(null)
+    reset()
   }
 
-  const handleSaveEdit = async () => {
+  const onSubmit = async (data: CrawlTaskFormData) => {
     if (!editingTask) return
 
     // 낙관적 업데이트: UI 즉시 반영
     const updatedTask: CrawlTask = {
       ...editingTask,
-      name: editName,
+      name: data.name,
       config: {
-        type: editType,
-        patterns: editPatterns,
-        limit: editLimit,
-        includeAbsolutePaths: editIncludeAbsolute,
-        includeRelativePaths: editIncludeRelative
+        type: data.type,
+        patterns: data.patterns,
+        limit: data.limit,
+        includeAbsolutePaths: data.includeAbsolutePaths,
+        includeRelativePaths: data.includeRelativePaths
       },
       updatedAt: Date.now()
     }
@@ -157,15 +192,15 @@ export default function CrawlTaskPage({ isStorageActive }: CrawlTaskPageProps) {
     // 백그라운드에서 DB 저장
     try {
       await taskService.updateCrawl(editingTask.id, {
-        name: editName,
-        type: editType,
-        patterns: editPatterns,
-        limit: editLimit,
-        includeAbsolutePaths: editIncludeAbsolute,
-        includeRelativePaths: editIncludeRelative
+        name: data.name,
+        type: data.type,
+        patterns: data.patterns,
+        limit: data.limit,
+        includeAbsolutePaths: data.includeAbsolutePaths,
+        includeRelativePaths: data.includeRelativePaths
       })
     } catch (err: unknown) {
-      alert(`Task 수정 실패: ${err.message}`)
+      alert(`Task 수정 실패: ${err instanceof Error ? err.message : '알 수 없는 오류'}`)
       // 실패 시 데이터 다시 로드하여 롤백
       await loadTasks(page)
     }
@@ -173,16 +208,16 @@ export default function CrawlTaskPage({ isStorageActive }: CrawlTaskPageProps) {
 
   const handleAddPattern = () => {
     if (!newPattern.trim()) return
-    if (editPatterns.includes(newPattern.trim())) {
+    if (patterns.includes(newPattern.trim())) {
       alert('이미 존재하는 패턴입니다')
       return
     }
-    setEditPatterns([...editPatterns, newPattern.trim()])
+    setValue('patterns', [...patterns, newPattern.trim()])
     setNewPattern('')
   }
 
   const handleDeletePattern = (pattern: string) => {
-    setEditPatterns(editPatterns.filter(p => p !== pattern))
+    setValue('patterns', patterns.filter(p => p !== pattern))
   }
 
   const formatTimestamp = (timestamp: number) => {
@@ -339,133 +374,147 @@ export default function CrawlTaskPage({ isStorageActive }: CrawlTaskPageProps) {
 
       {/* 편집 모달 */}
       <Dialog open={!!editingTask} onClose={handleCloseEdit} maxWidth="sm" fullWidth>
-        <DialogTitle>
-          <Stack direction="row" justifyContent="space-between" alignItems="center">
-            <Typography variant="h6">태스크 편집</Typography>
-            <IconButton onClick={handleCloseEdit} size="small">
-              <CloseIcon />
-            </IconButton>
-          </Stack>
-        </DialogTitle>
-        <DialogContent>
-          <Stack spacing={3} sx={{ mt: 2 }}>
-            {/* 이름 */}
-            <TextField
-              fullWidth
-              label="이름"
-              value={editName}
-              onChange={(e) => setEditName(e.target.value)}
-            />
-
-            {/* 타입 */}
-            <Box>
-              <Typography variant="subtitle2" gutterBottom>
-                필터 모드
-              </Typography>
-              <RadioGroup
-                value={editType}
-                onChange={(e) => setEditType(e.target.value as 'blacklist' | 'whitelist')}
-              >
-                <FormControlLabel
-                  value="blacklist"
-                  control={<Radio />}
-                  label="블랙리스트 (패턴에 해당하는 링크 제외)"
-                />
-                <FormControlLabel
-                  value="whitelist"
-                  control={<Radio />}
-                  label="화이트리스트 (패턴에 해당하는 링크만 포함)"
-                />
-              </RadioGroup>
-            </Box>
-
-            {/* Limit */}
-            <TextField
-              fullWidth
-              label="Limit (-1 = 무제한)"
-              type="number"
-              value={editLimit}
-              onChange={(e) => setEditLimit(parseInt(e.target.value) || -1)}
-            />
-
-            {/* 경로 포함 옵션 */}
-            <Box>
-              <Typography variant="subtitle2" gutterBottom>
-                URL 경로 타입
-              </Typography>
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    checked={editIncludeAbsolute}
-                    onChange={(e) => setEditIncludeAbsolute(e.target.checked)}
-                  />
-                }
-                label="절대경로 포함 (http://..., https://...)"
+        <form onSubmit={handleSubmit(onSubmit)}>
+          <DialogTitle>
+            <Stack direction="row" justifyContent="space-between" alignItems="center">
+              <Typography variant="h6">태스크 편집</Typography>
+              <IconButton onClick={handleCloseEdit} size="small">
+                <CloseIcon />
+              </IconButton>
+            </Stack>
+          </DialogTitle>
+          <DialogContent>
+            <Stack spacing={3} sx={{ mt: 2 }}>
+              {/* 이름 */}
+              <TextField
+                fullWidth
+                label="이름"
+                {...register('name')}
+                error={!!errors.name}
+                helperText={errors.name?.message}
               />
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    checked={editIncludeRelative}
-                    onChange={(e) => setEditIncludeRelative(e.target.checked)}
-                  />
-                }
-                label="상대경로 포함 (/page, ../image.png 등)"
-              />
-            </Box>
 
-            {/* 패턴 목록 */}
-            <Box>
-              <Typography variant="subtitle2" gutterBottom>
-                URL 패턴
-              </Typography>
-              <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
-                <TextField
-                  fullWidth
-                  size="small"
-                  placeholder="예: */products/*, */category/*"
-                  value={newPattern}
-                  onChange={(e) => setNewPattern(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && handleAddPattern()}
+              {/* 타입 */}
+              <Box>
+                <Typography variant="subtitle2" gutterBottom>
+                  필터 모드
+                </Typography>
+                <Controller
+                  name="type"
+                  control={control}
+                  render={({ field }) => (
+                    <RadioGroup {...field}>
+                      <FormControlLabel
+                        value="blacklist"
+                        control={<Radio />}
+                        label="블랙리스트 (패턴에 해당하는 링크 제외)"
+                      />
+                      <FormControlLabel
+                        value="whitelist"
+                        control={<Radio />}
+                        label="화이트리스트 (패턴에 해당하는 링크만 포함)"
+                      />
+                    </RadioGroup>
+                  )}
                 />
-                <Button variant="outlined" onClick={handleAddPattern}>
-                  추가
-                </Button>
-              </Stack>
+              </Box>
 
-              {editPatterns.length === 0 ? (
-                <Paper variant="outlined" sx={{ p: 2, textAlign: 'center' }}>
-                  <Typography variant="body2" color="text.secondary">
-                    패턴이 없습니다. 패턴을 추가하세요.
-                  </Typography>
-                </Paper>
-              ) : (
-                <Paper variant="outlined" sx={{ maxHeight: 200, overflow: 'auto' }}>
-                  <List dense>
-                    {editPatterns.map((pattern, idx) => (
-                      <ListItem key={idx}>
-                        <ListItemText
-                          primary={<code>{pattern}</code>}
-                          primaryTypographyProps={{ fontFamily: 'monospace', fontSize: '13px' }}
-                        />
-                        <ListItemSecondaryAction>
-                          <IconButton edge="end" size="small" onClick={() => handleDeletePattern(pattern)}>
-                            <CloseIcon fontSize="small" />
-                          </IconButton>
-                        </ListItemSecondaryAction>
-                      </ListItem>
-                    ))}
-                  </List>
-                </Paper>
-              )}
-            </Box>
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseEdit}>취소</Button>
-          <Button variant="contained" onClick={handleSaveEdit}>
-            저장
-          </Button>
-        </DialogActions>
+              {/* Limit */}
+              <TextField
+                fullWidth
+                label="Limit (-1 = 무제한)"
+                type="number"
+                {...register('limit', { valueAsNumber: true })}
+                error={!!errors.limit}
+                helperText={errors.limit?.message}
+              />
+
+              {/* 경로 포함 옵션 */}
+              <Box>
+                <Typography variant="subtitle2" gutterBottom>
+                  URL 경로 타입
+                </Typography>
+                <Controller
+                  name="includeAbsolutePaths"
+                  control={control}
+                  render={({ field }) => (
+                    <FormControlLabel
+                      control={<Checkbox {...field} checked={field.value} />}
+                      label="절대경로 포함 (http://..., https://...)"
+                    />
+                  )}
+                />
+                <Controller
+                  name="includeRelativePaths"
+                  control={control}
+                  render={({ field }) => (
+                    <FormControlLabel
+                      control={<Checkbox {...field} checked={field.value} />}
+                      label="상대경로 포함 (/page, ../image.png 등)"
+                    />
+                  )}
+                />
+                {errors.includeRelativePaths && (
+                  <Alert severity="error" sx={{ mt: 1 }}>
+                    {errors.includeRelativePaths.message}
+                  </Alert>
+                )}
+              </Box>
+
+              {/* 패턴 목록 */}
+              <Box>
+                <Typography variant="subtitle2" gutterBottom>
+                  URL 패턴
+                </Typography>
+                <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    placeholder="예: */products/*, */category/*"
+                    value={newPattern}
+                    onChange={(e) => setNewPattern(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && handleAddPattern()}
+                  />
+                  <Button variant="outlined" onClick={handleAddPattern}>
+                    추가
+                  </Button>
+                </Stack>
+
+                {patterns.length === 0 ? (
+                  <Paper variant="outlined" sx={{ p: 2, textAlign: 'center' }}>
+                    <Typography variant="body2" color="text.secondary">
+                      패턴이 없습니다. 패턴을 추가하세요.
+                    </Typography>
+                  </Paper>
+                ) : (
+                  <Paper variant="outlined" sx={{ maxHeight: 200, overflow: 'auto' }}>
+                    <List dense>
+                      {patterns.map((pattern, idx) => (
+                        <ListItem key={idx}>
+                          <ListItemText
+                            primary={<code>{pattern}</code>}
+                            primaryTypographyProps={{ fontFamily: 'monospace', fontSize: '13px' }}
+                          />
+                          <ListItemSecondaryAction>
+                            <IconButton edge="end" size="small" onClick={() => handleDeletePattern(pattern)}>
+                              <CloseIcon fontSize="small" />
+                            </IconButton>
+                          </ListItemSecondaryAction>
+                        </ListItem>
+                      ))}
+                    </List>
+                  </Paper>
+                )}
+              </Box>
+            </Stack>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={handleCloseEdit}>취소</Button>
+            <Button type="submit" variant="contained">
+              저장
+            </Button>
+          </DialogActions>
+        </form>
       </Dialog>
     </Box>
   )

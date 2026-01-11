@@ -1,4 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
 import {
   Box,
   Typography,
@@ -28,8 +31,6 @@ import AddIcon from '@mui/icons-material/Add'
 import ReactFlow, {
   Node,
   Edge,
-  addEdge,
-  Connection,
   useNodesState,
   useEdgesState,
   MarkerType,
@@ -42,6 +43,23 @@ import type { Pipeline, PipelineTask, AnyTask, CrawlTask, ActionTask } from '../
 import { pipelineService } from '../services/pipelineService'
 import { taskService } from '../services/taskService'
 import { colors } from '../styles'
+
+// Zod 스키마 정의
+const pipelineInfoSchema = z.object({
+  name: z.string()
+    .min(1, '파이프라인 이름을 입력해주세요')
+    .max(100, '이름은 100자 이하여야 합니다'),
+  description: z.string().max(500, '설명은 500자 이하여야 합니다').optional()
+})
+
+const pipelineItemSchema = z.object({
+  name: z.string()
+    .min(1, '파이프라인 아이템 이름을 입력해주세요')
+    .max(100, '이름은 100자 이하여야 합니다')
+})
+
+type PipelineInfoFormData = z.infer<typeof pipelineInfoSchema>
+type PipelineItemFormData = z.infer<typeof pipelineItemSchema>
 
 interface PipelineEditorPageProps {
   pipelineId: string | null
@@ -166,8 +184,26 @@ function TaskNode({ data }: { data: TaskNodeData }) {
 
 export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEditorPageProps) {
   const [pipeline, setPipeline] = useState<Pipeline | null>(null)
-  const [pipelineName, setPipelineName] = useState('')
-  const [pipelineDesc, setPipelineDesc] = useState('')
+
+  // React Hook Form - 파이프라인 정보
+  const { register: registerInfo, watch: watchInfo, setValue: setValueInfo, formState: { errors: errorsInfo } } = useForm<PipelineInfoFormData>({
+    resolver: zodResolver(pipelineInfoSchema),
+    defaultValues: {
+      name: '',
+      description: ''
+    }
+  })
+
+  // React Hook Form - 아이템 이름
+  const { register: registerItem, handleSubmit: handleSubmitItem, setValue: setValueItem, reset: resetItem, formState: { errors: errorsItem } } = useForm<PipelineItemFormData>({
+    resolver: zodResolver(pipelineItemSchema),
+    defaultValues: {
+      name: ''
+    }
+  })
+
+  const pipelineName = watchInfo('name')
+  const pipelineDesc = watchInfo('description')
 
   const nodeTypes: NodeTypes = useMemo(() => ({
     taskNode: TaskNode
@@ -186,7 +222,6 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
 
   // Pipeline item naming
   const [selectedTask, setSelectedTask] = useState<AnyTask | null>(null)
-  const [pipelineItemName, setPipelineItemName] = useState('')
   const [showNameDialog, setShowNameDialog] = useState(false)
 
   useEffect(() => {
@@ -203,8 +238,8 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
 
   const loadPipeline = async () => {
     if (!pipelineId) {
-      setPipelineName('')
-      setPipelineDesc('')
+      setValueInfo('name', '')
+      setValueInfo('description', '')
       return
     }
 
@@ -212,8 +247,8 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
       const data = await pipelineService.get(pipelineId)
       if (data) {
         setPipeline(data)
-        setPipelineName(data.name)
-        setPipelineDesc(data.description || '')
+        setValueInfo('name', data.name)
+        setValueInfo('description', data.description || '')
         loadNodesFromPipeline(data)
       }
     } catch (err) {
@@ -340,8 +375,6 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
     setSelectingParentId(parentId)
     setSearchQuery('')
     setCategoryFilter('all')
-    setCrawlTypeFilter('all')
-    setShowTaskSelector(true)
   }, [])
 
   const handleDeleteNode = useCallback((nodeId: string) => {
@@ -369,18 +402,12 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
 
     // Open name dialog
     setSelectedTask(task)
-    setPipelineItemName(defaultName)
-    setShowTaskSelector(false)
+    setValueItem('name', defaultName)
     setShowNameDialog(true)
   }
 
-  const handleConfirmPipelineItem = () => {
+  const onSubmitPipelineItem = (data: PipelineItemFormData) => {
     if (!selectingParentId || !selectedTask) return
-
-    if (!pipelineItemName.trim()) {
-      alert('파이프라인 아이템 이름을 입력해주세요.')
-      return
-    }
 
     // Check if root already has a child
     if (selectingParentId === 'root') {
@@ -390,14 +417,14 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
         setShowNameDialog(false)
         setSelectingParentId(null)
         setSelectedTask(null)
-        setPipelineItemName('')
+        resetItem()
         return
       }
     }
 
     // Check for duplicate name
     const existingNames = nodes.map(n => n.data.taskName)
-    if (existingNames.includes(pipelineItemName.trim())) {
+    if (existingNames.includes(data.name.trim())) {
       alert('이미 존재하는 이름입니다. 다른 이름을 사용해주세요.')
       return
     }
@@ -424,7 +451,7 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
       data: {
         nodeId: newNodeId,
         taskId: selectedTask.id,
-        taskName: pipelineItemName.trim(),
+        taskName: data.name.trim(),
         taskCategory: selectedTask.category,
         onAddChild: handleAddChild,
         onDelete: handleDeleteNode
@@ -448,7 +475,7 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
     setShowNameDialog(false)
     setSelectingParentId(null)
     setSelectedTask(null)
-    setPipelineItemName('')
+    resetItem()
   }
 
   // Filter tasks based on search and filters
@@ -470,7 +497,8 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
   }, [availableTasks, searchQuery, categoryFilter])
 
   const handleSave = async () => {
-    if (!pipelineName.trim()) {
+    // 검증
+    if (!pipelineName || !pipelineName.trim()) {
       alert('파이프라인 이름을 입력해주세요.')
       return
     }
@@ -555,18 +583,18 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
           </IconButton>
           <Box sx={{ flex: 1 }}>
             <TextField
-              value={pipelineName}
-              onChange={(e) => setPipelineName(e.target.value)}
+              {...registerInfo('name')}
               placeholder="파이프라인 이름"
               variant="standard"
               sx={{ minWidth: 300, mb: 0.5 }}
               InputProps={{
                 style: { fontSize: '18px', fontWeight: 600 }
               }}
+              error={!!errorsInfo.name}
+              helperText={errorsInfo.name?.message}
             />
             <TextField
-              value={pipelineDesc}
-              onChange={(e) => setPipelineDesc(e.target.value)}
+              {...registerInfo('description')}
               placeholder="설명 (선택사항)"
               variant="standard"
               fullWidth
@@ -574,6 +602,8 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
               InputProps={{
                 style: { fontSize: '14px' }
               }}
+              error={!!errorsInfo.description}
+              helperText={errorsInfo.description?.message}
             />
           </Box>
           <Button
@@ -742,58 +772,55 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
         maxWidth="xs"
         fullWidth
       >
-        <DialogTitle>파이프라인 아이템 이름 설정</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ mt: 1 }}>
-            {selectedTask && (
-              <Box>
-                <Typography variant="caption" color="text.secondary">
-                  선택한 태스크
-                </Typography>
-                <Box sx={{ mt: 1 }}>
-                  <Stack direction="row" spacing={1} alignItems="center">
-                    <Typography variant="body2" fontWeight={500}>
-                      {selectedTask.name}
-                    </Typography>
-                    <Chip
-                      label={selectedTask.category === 'crawl' ? 'URL추출' : '작업'}
-                      size="small"
-                      color={selectedTask.category === 'crawl' ? 'primary' : 'secondary'}
-                    />
-                    {selectedTask.category === 'crawl' && (
+        <form onSubmit={handleSubmitItem(onSubmitPipelineItem)}>
+          <DialogTitle>파이프라인 아이템 이름 설정</DialogTitle>
+          <DialogContent>
+            <Stack spacing={2} sx={{ mt: 1 }}>
+              {selectedTask && (
+                <Box>
+                  <Typography variant="caption" color="text.secondary">
+                    선택한 태스크
+                  </Typography>
+                  <Box sx={{ mt: 1 }}>
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <Typography variant="body2" fontWeight={500}>
+                        {selectedTask.name}
+                      </Typography>
                       <Chip
-                        label={(selectedTask as CrawlTask).config.type === 'whitelist' ? '화이트리스트' : '블랙리스트'}
+                        label={selectedTask.category === 'crawl' ? 'URL추출' : '작업'}
                         size="small"
-                        color={(selectedTask as CrawlTask).config.type === 'whitelist' ? 'success' : 'error'}
-                        variant="outlined"
+                        color={selectedTask.category === 'crawl' ? 'primary' : 'secondary'}
                       />
-                    )}
-                  </Stack>
+                      {selectedTask.category === 'crawl' && (
+                        <Chip
+                          label={(selectedTask as CrawlTask).config.type === 'whitelist' ? '화이트리스트' : '블랙리스트'}
+                          size="small"
+                          color={(selectedTask as CrawlTask).config.type === 'whitelist' ? 'success' : 'error'}
+                          variant="outlined"
+                        />
+                      )}
+                    </Stack>
+                  </Box>
                 </Box>
-              </Box>
-            )}
+              )}
 
-            <TextField
-              fullWidth
-              label="파이프라인 아이템 이름"
-              value={pipelineItemName}
-              onChange={(e) => setPipelineItemName(e.target.value)}
-              onKeyPress={(e) => {
-                if (e.key === 'Enter') {
-                  handleConfirmPipelineItem()
-                }
-              }}
-              autoFocus
-              helperText="같은 태스크를 여러 번 사용할 수 있습니다. 각 아이템마다 고유한 이름을 지정하세요."
-            />
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setShowNameDialog(false)}>취소</Button>
-          <Button variant="contained" onClick={handleConfirmPipelineItem}>
-            확인
-          </Button>
-        </DialogActions>
+              <TextField
+                fullWidth
+                label="파이프라인 아이템 이름"
+                {...registerItem('name')}
+                error={!!errorsItem.name}
+                helperText={errorsItem.name?.message || '같은 태스크를 여러 번 사용할 수 있습니다. 각 아이템마다 고유한 이름을 지정하세요.'}
+                autoFocus
+              />
+            </Stack>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setShowNameDialog(false)}>취소</Button>
+            <Button type="submit" variant="contained">
+              확인
+            </Button>
+          </DialogActions>
+        </form>
       </Dialog>
 
     </Box>

@@ -143,6 +143,7 @@ declare global {
       selectPath: () => Promise<string | null>
       setPath: (path: string) => Promise<boolean>
       isActive: () => Promise<boolean>
+      getSavedPath: () => Promise<string>
     }
     crawlHistory: {
       getAll: () => Promise<CrawlHistory[]>

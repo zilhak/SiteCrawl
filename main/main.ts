@@ -7,6 +7,7 @@ import { PipelineDatabase, PipelineManager } from './pipeline'
 import type { Pipeline, PipelineTask } from './pipeline/types'
 import { TaskDatabase, TaskManager } from './task'
 import type { CreateCrawlTaskDTO, CreateActionTaskDTO, CrawlTask, ActionTask } from './task/types'
+import { appConfig } from './config'
 
 const isDev = !app.isPackaged
 
@@ -161,11 +162,19 @@ const setupIpcHandlers = (window: BrowserWindow) => {
         taskManager = new TaskManager(taskDB)
       }
 
+      // 경로 저장
+      appConfig.set('storagePath', storagePath)
+
       return true
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
       throw new Error(`저장 경로 설정 실패: ${errorMessage}`)
     }
+  })
+
+  // 저장된 경로 조회
+  ipcMain.handle('storage:get-saved-path', async () => {
+    return appConfig.get('storagePath')
   })
 
   // 저장소 활성화 여부 확인
@@ -379,7 +388,25 @@ const setupIpcHandlers = (window: BrowserWindow) => {
   })
 }
 
-app.whenReady().then(createWindow)
+app.whenReady().then(() => {
+  // 저장된 경로가 있으면 자동으로 로드
+  const savedPath = appConfig.get('storagePath')
+  if (savedPath) {
+    historyDB.setDatabasePath(savedPath)
+
+    // Pipeline & Task 데이터베이스 초기화
+    const db = historyDB.getDatabase()
+    if (db) {
+      pipelineDB = new PipelineDatabase(db)
+      pipelineManager = new PipelineManager(pipelineDB)
+
+      taskDB = new TaskDatabase(db)
+      taskManager = new TaskManager(taskDB)
+    }
+  }
+
+  createWindow()
+})
 
 app.on('window-all-closed', () => {
   historyDB.close()

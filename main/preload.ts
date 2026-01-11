@@ -17,7 +17,8 @@ contextBridge.exposeInMainWorld('crawler', {
 contextBridge.exposeInMainWorld('storage', {
   selectPath: () => ipcRenderer.invoke('storage:select-path'),
   setPath: (path: string) => ipcRenderer.invoke('storage:set-path', path),
-  isActive: () => ipcRenderer.invoke('storage:is-active')
+  isActive: () => ipcRenderer.invoke('storage:is-active'),
+  getSavedPath: () => ipcRenderer.invoke('storage:get-saved-path')
 })
 
 contextBridge.exposeInMainWorld('crawlHistory', {
