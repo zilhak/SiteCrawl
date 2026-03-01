@@ -109,15 +109,3 @@ contextBridge.exposeInMainWorld('task', {
     ipcRenderer.invoke('task:validate', task)
 })
 
-contextBridge.exposeInMainWorld('filter', {
-  create: (dto: unknown) =>
-    ipcRenderer.invoke('filter:create', dto),
-  get: (id: string) =>
-    ipcRenderer.invoke('filter:get', id),
-  getAll: () =>
-    ipcRenderer.invoke('filter:get-all'),
-  update: (id: string, updates: unknown) =>
-    ipcRenderer.invoke('filter:update', id, updates),
-  delete: (id: string) =>
-    ipcRenderer.invoke('filter:delete', id)
-})

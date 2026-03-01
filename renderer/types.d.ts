@@ -27,18 +27,6 @@ export interface CrawlHistory {
   timestamp: number
 }
 
-// Filter
-export interface Filter {
-  id: string
-  name: string
-  description?: string
-  mode: 'whitelist' | 'blacklist'
-  regex?: string
-  wildcards?: string[]
-  createdAt: number
-  updatedAt: number
-}
-
 // Task
 export type TaskCategory = 'string_filter' | 'page_navigation' | 'string_extraction' | 'resource_extraction'
 
@@ -180,13 +168,6 @@ declare global {
         totalPages: number
       }>
       validate: (task: unknown) => Promise<{ valid: boolean; errors: string[]; warnings: string[] }>
-    }
-    filter: {
-      create: (dto: unknown) => Promise<Filter>
-      get: (id: string) => Promise<Filter | null>
-      getAll: () => Promise<Filter[]>
-      update: (id: string, updates: unknown) => Promise<{ success: boolean; error?: string }>
-      delete: (id: string) => Promise<boolean>
     }
   }
 }

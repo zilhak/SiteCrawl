@@ -23,9 +23,8 @@ import ReactFlow, {
   NodeTypes
 } from 'reactflow'
 import 'reactflow/dist/style.css'
-import type { Pipeline, PipelineTask, Filter } from '../types'
+import type { Pipeline, PipelineTask } from '../types'
 import { pipelineService } from '../services/pipelineService'
-import { filterService } from '../services/filterService'
 import TaskNodeComponent from '../components/pipeline/TaskNode'
 import type { TaskNodeData } from '../components/pipeline/TaskNode'
 import TaskPropertyPanel from '../components/pipeline/TaskPropertyPanel'
@@ -68,14 +67,6 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
 
   // 우측 패널: 선택된 노드
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
-  const [filters, setFilters] = useState<Filter[]>([])
-
-  // Filter 목록 로드
-  useEffect(() => {
-    filterService.getAll()
-      .then(setFilters)
-      .catch(() => setFilters([]))
-  }, [])
 
   // 파이프라인 로드 또는 초기화
   useEffect(() => {
@@ -514,7 +505,6 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
               }}
               parentCategory={parentData?.taskCategory}
               isParentRoot={parentData?.isRoot}
-              filters={filters}
               onUpdate={handleUpdateNode}
               onClose={() => {
                 setSelectedNodeId(null)

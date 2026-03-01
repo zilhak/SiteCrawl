@@ -9,8 +9,6 @@ import type { Pipeline, PipelineTask } from './pipeline/types'
 import { PipelineExecutionEngine } from './pipeline/execution'
 import { TaskDatabase, TaskManager } from './task'
 import type { CreateTaskDTO, TaskCategory } from './task/types'
-import { FilterDatabase, FilterManager } from './filter'
-import type { CreateFilterDTO } from './filter/types'
 import { appConfig } from './config'
 
 const isDev = !app.isPackaged
@@ -21,8 +19,6 @@ let pipelineDB: PipelineDatabase | null = null
 let pipelineManager: PipelineManager | null = null
 let taskDB: TaskDatabase | null = null
 let taskManager: TaskManager | null = null
-let filterDB: FilterDatabase | null = null
-let filterManager: FilterManager | null = null
 
 const createWindow = () => {
   mainWindow = new BrowserWindow({
@@ -156,10 +152,10 @@ const setupIpcHandlers = (window: BrowserWindow) => {
       const selectedPath = result.filePaths[0]
 
       // 이미 같은 경로로 활성화되어 있지 않으면 초기화
-      if (!historyDB.isActive() || !pipelineManager || !taskManager || !filterManager) {
+      if (!historyDB.isActive() || !pipelineManager || !taskManager) {
         historyDB.setDatabasePath(selectedPath)
 
-        // Pipeline & Task & Filter 데이터베이스 초기화
+        // Pipeline & Task 데이터베이스 초기화
         const db = historyDB.getDatabase()
         if (db) {
           pipelineDB = new PipelineDatabase(db)
@@ -167,9 +163,6 @@ const setupIpcHandlers = (window: BrowserWindow) => {
 
           taskDB = new TaskDatabase(db)
           taskManager = new TaskManager(taskDB)
-
-          filterDB = new FilterDatabase(db)
-          filterManager = new FilterManager(filterDB)
         }
       }
 
@@ -183,14 +176,14 @@ const setupIpcHandlers = (window: BrowserWindow) => {
   ipcMain.handle('storage:set-path', async (_event, storagePath: string) => {
     try {
       // 이미 같은 경로로 활성화되어 있으면 중복 초기화 방지
-      if (historyDB.isActive() && pipelineManager && taskManager && filterManager) {
+      if (historyDB.isActive() && pipelineManager && taskManager) {
         appConfig.set('storagePath', storagePath)
         return true
       }
 
       historyDB.setDatabasePath(storagePath)
 
-      // Pipeline & Task & Filter 데이터베이스 초기화
+      // Pipeline & Task 데이터베이스 초기화
       const db = historyDB.getDatabase()
       if (db) {
         pipelineDB = new PipelineDatabase(db)
@@ -198,9 +191,6 @@ const setupIpcHandlers = (window: BrowserWindow) => {
 
         taskDB = new TaskDatabase(db)
         taskManager = new TaskManager(taskDB)
-
-        filterDB = new FilterDatabase(db)
-        filterManager = new FilterManager(filterDB)
       }
 
       // 경로 저장
@@ -379,35 +369,9 @@ const setupIpcHandlers = (window: BrowserWindow) => {
     return taskManager.validateTask(task as any)
   })
 
-  // Filter CRUD
-  ipcMain.handle('filter:create', async (_event, dto: unknown) => {
-    if (!filterManager) throw new Error('저장소가 설정되지 않았습니다.')
-    return filterManager.createFilter(dto as CreateFilterDTO)
-  })
-
-  ipcMain.handle('filter:get', async (_event, id: string) => {
-    if (!filterManager) throw new Error('저장소가 설정되지 않았습니다.')
-    return filterManager.getFilter(id)
-  })
-
-  ipcMain.handle('filter:get-all', async () => {
-    if (!filterManager) throw new Error('저장소가 설정되지 않았습니다.')
-    return filterManager.getAllFilters()
-  })
-
-  ipcMain.handle('filter:update', async (_event, id: string, updates: unknown) => {
-    if (!filterManager) throw new Error('저장소가 설정되지 않았습니다.')
-    return filterManager.updateFilter(id, updates as Partial<CreateFilterDTO>)
-  })
-
-  ipcMain.handle('filter:delete', async (_event, id: string) => {
-    if (!filterManager) throw new Error('저장소가 설정되지 않았습니다.')
-    return filterManager.deleteFilter(id)
-  })
-
   // Pipeline 실행
   ipcMain.handle('pipeline:execute', async (_event, pipelineId: string, initialUrl: string) => {
-    if (!pipelineManager || !taskManager || !filterManager) {
+    if (!pipelineManager || !taskManager) {
       throw new Error('저장소가 설정되지 않았습니다.')
     }
 
@@ -428,7 +392,6 @@ const setupIpcHandlers = (window: BrowserWindow) => {
     }
 
     const engine = new PipelineExecutionEngine({
-      filterManager,
       onProgress: (event) => {
         window.webContents.send('pipeline:execution-progress', event)
       }
@@ -480,7 +443,7 @@ app.whenReady().then(() => {
   if (savedPath) {
     historyDB.setDatabasePath(savedPath)
 
-    // Pipeline & Task & Filter 데이터베이스 초기화
+    // Pipeline & Task 데이터베이스 초기화
     const db = historyDB.getDatabase()
     if (db) {
       pipelineDB = new PipelineDatabase(db)
@@ -488,9 +451,6 @@ app.whenReady().then(() => {
 
       taskDB = new TaskDatabase(db)
       taskManager = new TaskManager(taskDB)
-
-      filterDB = new FilterDatabase(db)
-      filterManager = new FilterManager(filterDB)
     }
   }
 

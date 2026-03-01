@@ -10,8 +10,6 @@ import type { Pipeline } from '../types'
 import type { DAGNode } from '../types'
 import { DAG } from '../dag'
 import { PipelineValidator } from '../validator'
-import type { FilterManager } from '../../filter/manager'
-import { FilterEngine } from '../../filter/engine'
 import type { PipelineTaskCategory } from '../types'
 import type {
   TaskData,
@@ -22,18 +20,15 @@ import type {
 import { TASK_IO_MAP } from './types'
 
 export interface EngineDependencies {
-  filterManager: FilterManager
   onProgress: (event: ExecutionProgressEvent) => void
 }
 
 export class PipelineExecutionEngine {
-  private filterManager: FilterManager
   private onProgress: (event: ExecutionProgressEvent) => void
   private browser: Browser | null = null
   private context: BrowserContext | null = null
 
   constructor(deps: EngineDependencies) {
-    this.filterManager = deps.filterManager
     this.onProgress = deps.onProgress
   }
 
@@ -199,6 +194,7 @@ export class PipelineExecutionEngine {
 
   /**
    * 문자열 필터링 태스크: string[] → string[]
+   * config: { mode, regex?, wildcards?, limit? }
    */
   private async executeStringFilter(
     config: Record<string, unknown>,
@@ -210,20 +206,13 @@ export class PipelineExecutionEngine {
 
     let result = [...input.value] // 불변: 새 배열 생성
 
-    // 사전 필터 적용
-    if (config.preFilterId) {
-      const filter = this.filterManager.getFilter(config.preFilterId as string)
-      if (filter) {
-        result = FilterEngine.apply(result, filter)
-      }
-    }
+    // 인라인 필터 적용 (mode + regex + wildcards)
+    const mode = config.mode as string
+    const regex = config.regex as string | undefined
+    const wildcards = config.wildcards as string[] | undefined
 
-    // 사후 필터 적용
-    if (config.postFilterId) {
-      const filter = this.filterManager.getFilter(config.postFilterId as string)
-      if (filter) {
-        result = FilterEngine.apply(result, filter)
-      }
+    if (mode && (regex || (wildcards && wildcards.length > 0))) {
+      result = PipelineExecutionEngine.applyFilter(result, mode, regex, wildcards)
     }
 
     // Limit 적용
@@ -329,12 +318,13 @@ export class PipelineExecutionEngine {
       }
     })
 
-    // 사후 필터 적용
-    if (config.postFilterId) {
-      const filter = this.filterManager.getFilter(config.postFilterId as string)
-      if (filter) {
-        filtered = FilterEngine.apply(filtered, filter)
-      }
+    // 인라인 사후 필터 적용
+    const postFilterMode = config.postFilterMode as string | undefined
+    const postFilterRegex = config.postFilterRegex as string | undefined
+    const postFilterWildcards = config.postFilterWildcards as string[] | undefined
+
+    if (postFilterMode && (postFilterRegex || (postFilterWildcards && postFilterWildcards.length > 0))) {
+      filtered = PipelineExecutionEngine.applyFilter(filtered, postFilterMode, postFilterRegex, postFilterWildcards)
     }
 
     // Page 닫기 (리소스 정리)
@@ -379,12 +369,13 @@ export class PipelineExecutionEngine {
       }
     })
 
-    // 필터 적용
-    if (config.filterId) {
-      const filter = this.filterManager.getFilter(config.filterId as string)
-      if (filter) {
-        result = FilterEngine.apply(result, filter)
-      }
+    // 인라인 필터 적용
+    const filterMode = config.filterMode as string | undefined
+    const filterRegex = config.filterRegex as string | undefined
+    const filterWildcards = config.filterWildcards as string[] | undefined
+
+    if (filterMode && (filterRegex || (filterWildcards && filterWildcards.length > 0))) {
+      result = PipelineExecutionEngine.applyFilter(result, filterMode, filterRegex, filterWildcards)
     }
 
     return { type: 'strings', value: result }
@@ -533,6 +524,43 @@ export class PipelineExecutionEngine {
         continue
       }
     }
+  }
+
+  /**
+   * 인라인 필터 적용 (FilterEngine 대체)
+   */
+  private static applyFilter(
+    input: string[],
+    mode: string,
+    regex?: string,
+    wildcards?: string[]
+  ): string[] {
+    return input.filter(item => {
+      const matches = PipelineExecutionEngine.matchesFilter(item, regex, wildcards)
+      return mode === 'whitelist' ? matches : !matches
+    })
+  }
+
+  private static matchesFilter(item: string, regex?: string, wildcards?: string[]): boolean {
+    if (!regex && (!wildcards || wildcards.length === 0)) return false
+
+    if (regex) {
+      try {
+        if (new RegExp(regex, 'i').test(item)) return true
+      } catch { /* invalid regex, skip */ }
+    }
+
+    if (wildcards && wildcards.length > 0) {
+      for (const pattern of wildcards) {
+        const regexPattern = pattern
+          .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+          .replace(/\*/g, '.*')
+          .replace(/\?/g, '.')
+        if (new RegExp(`^${regexPattern}$`, 'i').test(item)) return true
+      }
+    }
+
+    return false
   }
 
   /**

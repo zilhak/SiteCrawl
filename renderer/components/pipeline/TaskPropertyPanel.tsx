@@ -25,7 +25,8 @@ import CloseIcon from '@mui/icons-material/Close'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import WarningIcon from '@mui/icons-material/Warning'
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline'
-import type { TaskCategory, Filter } from '../../types'
+import AddIcon from '@mui/icons-material/Add'
+import type { TaskCategory } from '../../types'
 import { TASK_IO_MAP, CATEGORY_LABELS, CATEGORY_COLORS, IO_TYPE_LABELS } from '../../constants/taskIO'
 
 export interface TaskPropertyData {
@@ -38,7 +39,6 @@ interface TaskPropertyPanelProps {
   data: TaskPropertyData
   parentCategory?: TaskCategory  // 부모 노드의 카테고리 (IO 호환성 표시)
   isParentRoot?: boolean         // 부모가 _run_인지
-  filters: Filter[]
   onUpdate: (updates: Partial<TaskPropertyData>) => void
   onClose: () => void
 }
@@ -47,13 +47,20 @@ interface TaskPropertyPanelProps {
 function getDefaultConfig(category: TaskCategory): Record<string, unknown> {
   switch (category) {
     case 'string_filter':
-      return { preFilterId: '', postFilterId: '', limit: -1 }
+      return { mode: 'whitelist', regex: '', wildcards: [], limit: -1 }
     case 'page_navigation':
       return { waitUntil: 'domcontentloaded', timeout: 30000, handleCookies: true }
     case 'string_extraction':
-      return { includeHrefLinks: true, includeTextUrls: true, includeAbsolutePaths: true, includeRelativePaths: true, postFilterId: '' }
+      return {
+        includeHrefLinks: true, includeTextUrls: true,
+        includeAbsolutePaths: true, includeRelativePaths: true,
+        postFilterMode: '', postFilterRegex: '', postFilterWildcards: []
+      }
     case 'resource_extraction':
-      return { resourceTypes: ['image'], filterId: '' }
+      return {
+        resourceTypes: ['image'],
+        filterMode: '', filterRegex: '', filterWildcards: []
+      }
   }
 }
 
@@ -76,7 +83,6 @@ export default function TaskPropertyPanel({
   data,
   parentCategory,
   isParentRoot,
-  filters,
   onUpdate,
   onClose
 }: TaskPropertyPanelProps) {
@@ -212,7 +218,6 @@ export default function TaskPropertyPanel({
                 {category === 'string_filter' && (
                   <StringFilterConfig
                     config={config}
-                    filters={filters}
                     onChange={handleConfigChange}
                   />
                 )}
@@ -227,7 +232,6 @@ export default function TaskPropertyPanel({
                 {category === 'string_extraction' && (
                   <StringExtractionConfig
                     config={config}
-                    filters={filters}
                     onChange={handleConfigChange}
                   />
                 )}
@@ -235,7 +239,6 @@ export default function TaskPropertyPanel({
                 {category === 'resource_extraction' && (
                   <ResourceExtractionConfig
                     config={config}
-                    filters={filters}
                     onChange={handleConfigChange}
                   />
                 )}
@@ -265,50 +268,104 @@ export default function TaskPropertyPanel({
 interface ConfigProps {
   config: Record<string, unknown>
   onChange: (key: string, value: unknown) => void
-  filters?: Filter[]
 }
 
-function FilterDropdown({ label, value, filters, onChange }: {
-  label: string
-  value: string
-  filters: Filter[]
-  onChange: (value: string) => void
+// 인라인 필터 설정 컴포넌트 (Filter 엔티티 대체)
+function InlineFilterConfig({ modeKey, regexKey, wildcardsKey, config, onChange }: {
+  modeKey: string
+  regexKey: string
+  wildcardsKey: string
+  config: Record<string, unknown>
+  onChange: (key: string, value: unknown) => void
 }) {
+  const mode = (config[modeKey] as string) || ''
+  const regex = (config[regexKey] as string) || ''
+  const wildcards = (config[wildcardsKey] as string[]) || []
+  const [newWildcard, setNewWildcard] = useState('')
+
+  const addWildcard = () => {
+    if (newWildcard.trim()) {
+      onChange(wildcardsKey, [...wildcards, newWildcard.trim()])
+      setNewWildcard('')
+    }
+  }
+
+  const removeWildcard = (index: number) => {
+    onChange(wildcardsKey, wildcards.filter((_, i) => i !== index))
+  }
+
   return (
-    <FormControl fullWidth size="small">
-      <InputLabel>{label}</InputLabel>
-      <Select
-        value={value || ''}
-        label={label}
-        onChange={(e) => onChange(e.target.value)}
-      >
-        <MenuItem value="">
-          <em>없음</em>
-        </MenuItem>
-        {filters.map((f) => (
-          <MenuItem key={f.id} value={f.id}>
-            {f.name} ({f.mode === 'whitelist' ? '화이트' : '블랙'})
+    <Stack spacing={2}>
+      <FormControl fullWidth size="small">
+        <InputLabel>필터 모드</InputLabel>
+        <Select
+          value={mode}
+          label="필터 모드"
+          onChange={(e) => onChange(modeKey, e.target.value)}
+        >
+          <MenuItem value="">
+            <em>사용 안 함</em>
           </MenuItem>
-        ))}
-      </Select>
-    </FormControl>
+          <MenuItem value="whitelist">화이트리스트 (일치만 포함)</MenuItem>
+          <MenuItem value="blacklist">블랙리스트 (일치 제외)</MenuItem>
+        </Select>
+      </FormControl>
+
+      {mode && (
+        <>
+          <TextField
+            fullWidth
+            size="small"
+            label="정규표현식"
+            placeholder="예: https?://example\\.com/.*"
+            value={regex}
+            onChange={(e) => onChange(regexKey, e.target.value)}
+          />
+
+          <Box>
+            <Typography variant="caption" color="text.secondary" gutterBottom display="block">
+              와일드카드 패턴
+            </Typography>
+            <Stack direction="row" spacing={1} sx={{ mb: 1 }}>
+              <TextField
+                size="small"
+                placeholder="예: *.jpg"
+                value={newWildcard}
+                onChange={(e) => setNewWildcard(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addWildcard() } }}
+                sx={{ flex: 1 }}
+              />
+              <IconButton size="small" onClick={addWildcard} disabled={!newWildcard.trim()}>
+                <AddIcon />
+              </IconButton>
+            </Stack>
+            <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
+              {wildcards.map((w, i) => (
+                <Chip
+                  key={i}
+                  label={w}
+                  size="small"
+                  onDelete={() => removeWildcard(i)}
+                  variant="outlined"
+                />
+              ))}
+            </Stack>
+          </Box>
+        </>
+      )}
+    </Stack>
   )
 }
 
-function StringFilterConfig({ config, filters = [], onChange }: ConfigProps) {
+function StringFilterConfig({ config, onChange }: ConfigProps) {
   return (
     <Stack spacing={2}>
-      <FilterDropdown
-        label="사전 필터"
-        value={(config.preFilterId as string) || ''}
-        filters={filters}
-        onChange={(v) => onChange('preFilterId', v)}
-      />
-      <FilterDropdown
-        label="사후 필터"
-        value={(config.postFilterId as string) || ''}
-        filters={filters}
-        onChange={(v) => onChange('postFilterId', v)}
+      <InlineFilterConfig
+        modeKey="mode"
+        regexKey="regex"
+        wildcardsKey="wildcards"
+        config={config}
+        onChange={onChange}
       />
       <TextField
         fullWidth
@@ -358,7 +415,7 @@ function PageNavigationConfig({ config, onChange }: ConfigProps) {
   )
 }
 
-function StringExtractionConfig({ config, filters = [], onChange }: ConfigProps) {
+function StringExtractionConfig({ config, onChange }: ConfigProps) {
   return (
     <Stack spacing={2}>
       <FormControlLabel
@@ -397,11 +454,16 @@ function StringExtractionConfig({ config, filters = [], onChange }: ConfigProps)
         }
         label="상대경로 포함"
       />
-      <FilterDropdown
-        label="추출 후 필터"
-        value={(config.postFilterId as string) || ''}
-        filters={filters}
-        onChange={(v) => onChange('postFilterId', v)}
+      <Divider />
+      <Typography variant="caption" color="text.secondary">
+        추출 후 필터 (선택)
+      </Typography>
+      <InlineFilterConfig
+        modeKey="postFilterMode"
+        regexKey="postFilterRegex"
+        wildcardsKey="postFilterWildcards"
+        config={config}
+        onChange={onChange}
       />
     </Stack>
   )
@@ -415,7 +477,7 @@ const RESOURCE_TYPES = [
   { value: 'js', label: 'JS' }
 ] as const
 
-function ResourceExtractionConfig({ config, filters = [], onChange }: ConfigProps) {
+function ResourceExtractionConfig({ config, onChange }: ConfigProps) {
   const selected = (config.resourceTypes as string[]) || []
 
   const toggleType = (type: string) => {
@@ -446,11 +508,16 @@ function ResourceExtractionConfig({ config, filters = [], onChange }: ConfigProp
           ))}
         </Stack>
       </Box>
-      <FilterDropdown
-        label="필터"
-        value={(config.filterId as string) || ''}
-        filters={filters}
-        onChange={(v) => onChange('filterId', v)}
+      <Divider />
+      <Typography variant="caption" color="text.secondary">
+        결과 필터 (선택)
+      </Typography>
+      <InlineFilterConfig
+        modeKey="filterMode"
+        regexKey="filterRegex"
+        wildcardsKey="filterWildcards"
+        config={config}
+        onChange={onChange}
       />
     </Stack>
   )
