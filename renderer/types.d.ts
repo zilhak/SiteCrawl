@@ -56,10 +56,11 @@ export type AnyTask = Task
 
 // Pipeline
 export interface PipelineTask {
-  taskId: string
-  name: string
-  trigger: string
-  config?: string
+  name: string                    // Pipeline 내 고유 이름
+  trigger: string                 // 실행 조건: '_run_' 또는 다른 Task의 name
+  category: TaskCategory          // Task 카테고리
+  taskConfig: Record<string, unknown>  // 카테고리별 config (인라인)
+  taskId?: string                 // 기존 Task 참조 (선택)
 }
 
 export interface Pipeline {

@@ -30,15 +30,24 @@ export class PipelineDatabase {
       )
     `)
 
-    // Pipeline Tasks 테이블 (DAG 구조)
+    // 스키마 마이그레이션: 이전 pipeline_tasks 테이블 드롭 (category 컬럼 없는 경우)
+    try {
+      const tableInfo = this.db.pragma('table_info(pipeline_tasks)') as { name: string }[]
+      if (tableInfo.length > 0 && !tableInfo.some(col => col.name === 'category')) {
+        this.db.exec('DROP TABLE IF EXISTS pipeline_tasks')
+      }
+    } catch { /* 테이블이 아예 없는 경우 무시 */ }
+
+    // Pipeline Tasks 테이블 (DAG 구조) - JSON이 본체
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS pipeline_tasks (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         pipeline_id TEXT NOT NULL,
-        task_id TEXT NOT NULL,
         name TEXT NOT NULL,
-        trigger TEXT NOT NULL,
-        config TEXT,
+        trigger_name TEXT NOT NULL,
+        category TEXT NOT NULL,
+        task_config TEXT NOT NULL DEFAULT '{}',
+        task_id TEXT,
         FOREIGN KEY (pipeline_id) REFERENCES pipelines(id) ON DELETE CASCADE,
         UNIQUE(pipeline_id, name)
       )
@@ -64,7 +73,7 @@ export class PipelineDatabase {
         ON pipeline_tasks(pipeline_id);
 
       CREATE INDEX IF NOT EXISTS idx_pipeline_tasks_trigger
-        ON pipeline_tasks(pipeline_id, trigger);
+        ON pipeline_tasks(pipeline_id, trigger_name);
 
       CREATE INDEX IF NOT EXISTS idx_pipeline_executions_pipeline
         ON pipeline_executions(pipeline_id, started_at DESC);
@@ -100,17 +109,18 @@ export class PipelineDatabase {
 
       // Task 저장
       const taskStmt = this.db!.prepare(`
-        INSERT INTO pipeline_tasks (pipeline_id, task_id, name, trigger, config)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO pipeline_tasks (pipeline_id, name, trigger_name, category, task_config, task_id)
+        VALUES (?, ?, ?, ?, ?, ?)
       `)
 
       for (const task of pipeline.tasks) {
         taskStmt.run(
           pipeline.id,
-          task.taskId,
           task.name,
           task.trigger,
-          task.config || null
+          task.category,
+          JSON.stringify(task.taskConfig),
+          task.taskId || null
         )
       }
     })
@@ -134,17 +144,18 @@ export class PipelineDatabase {
 
     // Tasks 조회
     const tasksStmt = this.db.prepare(`
-      SELECT task_id, name, trigger, config
+      SELECT name, trigger_name, category, task_config, task_id
       FROM pipeline_tasks
       WHERE pipeline_id = ?
     `)
     const taskRows = tasksStmt.all(id) as any[]
 
     const tasks: PipelineTask[] = taskRows.map(row => ({
-      taskId: row.task_id,
       name: row.name,
-      trigger: row.trigger,
-      config: row.config
+      trigger: row.trigger_name,
+      category: row.category,
+      taskConfig: JSON.parse(row.task_config || '{}'),
+      ...(row.task_id ? { taskId: row.task_id } : {})
     }))
 
     return {

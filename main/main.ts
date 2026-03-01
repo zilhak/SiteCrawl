@@ -409,7 +409,6 @@ const setupIpcHandlers = (window: BrowserWindow) => {
     }
 
     const engine = new PipelineExecutionEngine({
-      taskManager,
       filterManager,
       onProgress: (event) => {
         window.webContents.send('pipeline:execution-progress', event)

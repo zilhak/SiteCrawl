@@ -23,9 +23,10 @@ export class DAG {
     for (const task of pipeline.tasks) {
       const node: DAGNode = {
         name: task.name,
-        taskId: task.taskId,
+        category: task.category,
+        taskConfig: task.taskConfig,
         trigger: task.trigger,
-        config: task.config ? JSON.parse(task.config) : undefined,
+        taskId: task.taskId,
         children: [],
         parents: []
       }
@@ -232,7 +233,7 @@ export class DAG {
       }
 
       visited.add(node.name)
-      lines.push('  '.repeat(indent) + `${node.name} [${node.taskId}]`)
+      lines.push('  '.repeat(indent) + `${node.name} [${node.category}]`)
 
       for (const child of node.children) {
         print(child, indent + 1)

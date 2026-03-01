@@ -2,12 +2,16 @@
  * Pipeline 관련 타입 정의
  */
 
-// Pipeline Task (DAG 노드)
+// Task 카테고리 (pipeline 내에서도 사용)
+export type PipelineTaskCategory = 'string_filter' | 'page_navigation' | 'string_extraction' | 'resource_extraction'
+
+// Pipeline Task (DAG 노드) - JSON이 본체, Task 설정을 인라인으로 포함
 export interface PipelineTask {
-  taskId: string        // 실행할 Task의 ID
-  name: string          // Pipeline 내 고유 이름 (다른 Task가 참조)
-  trigger: string       // 실행 조건: '_run_' 또는 다른 Task의 name
-  config?: string       // Task별 설정 (JSON string)
+  name: string                    // Pipeline 내 고유 이름 (다른 Task가 참조)
+  trigger: string                 // 실행 조건: '_run_' 또는 다른 Task의 name
+  category: PipelineTaskCategory  // Task 카테고리
+  taskConfig: Record<string, unknown>  // 카테고리별 config (인라인)
+  taskId?: string                 // 기존 Task 참조 (하위 호환, 선택)
 }
 
 // Pipeline 정의
@@ -61,9 +65,10 @@ export interface ExecutionResult {
 // DAG 노드
 export interface DAGNode {
   name: string
-  taskId: string
+  category: PipelineTaskCategory
+  taskConfig: Record<string, unknown>
   trigger: string
-  config?: any
+  taskId?: string
   children: DAGNode[]
   parents: DAGNode[]
 }

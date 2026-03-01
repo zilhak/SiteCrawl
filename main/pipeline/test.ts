@@ -6,6 +6,16 @@ import { Pipeline, PipelineTask } from './types'
 import { DAG } from './dag'
 import { PipelineValidator } from './validator'
 
+// 테스트 헬퍼: 간단한 PipelineTask 생성
+function makeTask(
+  name: string,
+  trigger: string,
+  category: PipelineTask['category'] = 'string_filter',
+  taskConfig: Record<string, unknown> = {}
+): PipelineTask {
+  return { name, trigger, category, taskConfig }
+}
+
 /**
  * 테스트 실행
  */
@@ -32,9 +42,9 @@ function testSimpleChain() {
     id: 'p1',
     name: 'Simple Chain',
     tasks: [
-      { taskId: 't1', name: 'crawl', trigger: '_run_' },
-      { taskId: 't2', name: 'filter', trigger: 'crawl' },
-      { taskId: 't3', name: 'screenshot', trigger: 'filter' }
+      makeTask('navigate', '_run_', 'page_navigation', { waitUntil: 'domcontentloaded', timeout: 30000 }),
+      makeTask('extract', 'navigate', 'string_extraction', { includeHrefLinks: true }),
+      makeTask('filter', 'extract', 'string_filter', { limit: 10 })
     ],
     createdAt: Date.now(),
     updatedAt: Date.now()
@@ -63,10 +73,10 @@ function testBranching() {
     id: 'p2',
     name: 'Branching',
     tasks: [
-      { taskId: 't1', name: 'crawl', trigger: '_run_' },
-      { taskId: 't2', name: 'screenshot', trigger: 'crawl' },
-      { taskId: 't3', name: 'scrape', trigger: 'crawl' },
-      { taskId: 't4', name: 'pdf', trigger: 'crawl' }
+      makeTask('navigate', '_run_', 'page_navigation', { waitUntil: 'load' }),
+      makeTask('extract_links', 'navigate', 'string_extraction', { includeHrefLinks: true }),
+      makeTask('extract_resources', 'navigate', 'string_extraction', { includeTextUrls: true }),
+      makeTask('filter_links', 'extract_links', 'string_filter', { limit: 5 })
     ],
     createdAt: Date.now(),
     updatedAt: Date.now()
@@ -96,12 +106,12 @@ function testComplexDAG() {
     id: 'p3',
     name: 'Complex DAG',
     tasks: [
-      { taskId: 't1', name: 'main_crawl', trigger: '_run_' },
-      { taskId: 't2', name: 'filter_products', trigger: 'main_crawl' },
-      { taskId: 't3', name: 'filter_blogs', trigger: 'main_crawl' },
-      { taskId: 't4', name: 'product_screenshot', trigger: 'filter_products' },
-      { taskId: 't5', name: 'product_data', trigger: 'filter_products' },
-      { taskId: 't6', name: 'blog_text', trigger: 'filter_blogs' }
+      makeTask('navigate', '_run_', 'page_navigation', { waitUntil: 'domcontentloaded' }),
+      makeTask('extract_all', 'navigate', 'string_extraction', { includeHrefLinks: true, includeTextUrls: true }),
+      makeTask('filter_products', 'extract_all', 'string_filter', { limit: -1 }),
+      makeTask('filter_blogs', 'extract_all', 'string_filter', { limit: 20 }),
+      makeTask('resource_imgs', 'filter_products', 'resource_extraction', { resourceTypes: ['image'] }),
+      makeTask('resource_pdfs', 'filter_blogs', 'resource_extraction', { resourceTypes: ['pdf'] })
     ],
     createdAt: Date.now(),
     updatedAt: Date.now()
@@ -131,25 +141,22 @@ function testCycleDetection() {
     id: 'p4',
     name: 'Cyclic (Invalid)',
     tasks: [
-      { taskId: 't1', name: 'a', trigger: '_run_' },
-      { taskId: 't2', name: 'b', trigger: 'a' },
-      { taskId: 't3', name: 'c', trigger: 'b' },
-      { taskId: 't4', name: 'd', trigger: 'c' },
-      { taskId: 't5', name: 'e', trigger: 'd' },
-      { taskId: 't6', name: 'f', trigger: 'e' },
-      { taskId: 't7', name: 'g', trigger: 'b' },  // 분기
-      { taskId: 't8', name: 'h', trigger: 'g' },
-      // 순환: h → c
-      { taskId: 't9', name: 'cycle', trigger: 'h', config: '{"target": "c"}' }
+      makeTask('a', '_run_', 'page_navigation'),
+      makeTask('b', 'a', 'string_extraction'),
+      makeTask('c', 'b', 'string_filter'),
+      makeTask('d', 'c', 'string_filter'),
+      makeTask('e', 'd', 'string_filter'),
+      makeTask('f', 'e', 'string_filter'),
+      makeTask('g', 'b', 'string_filter'),
+      makeTask('h', 'g', 'string_filter'),
+      makeTask('cycle', 'h', 'string_filter')
     ],
     createdAt: Date.now(),
     updatedAt: Date.now()
   }
 
-  // 임시로 순환 만들기 (실제로는 이런 구조가 되면 안 됨)
-  pipeline.tasks[8].trigger = 'h'
-  pipeline.tasks.push({ taskId: 't10', name: 'back_to_b', trigger: 'cycle' })
-  pipeline.tasks[pipeline.tasks.length - 1].trigger = 'b'  // b → ... → cycle → b (순환)
+  // 순환 만들기: back_to_b의 trigger를 'b'로 설정하여 b → ... → cycle → back_to_b → b 순환
+  pipeline.tasks.push(makeTask('back_to_b', 'b', 'string_filter'))
 
   const dag = DAG.fromPipeline(pipeline)
   const validator = new PipelineValidator()
@@ -178,8 +185,8 @@ function testValidation() {
     id: 'p1',
     name: 'No Entry',
     tasks: [
-      { taskId: 't1', name: 'a', trigger: 'b' },
-      { taskId: 't2', name: 'b', trigger: 'a' }
+      makeTask('a', 'b', 'string_filter'),
+      makeTask('b', 'a', 'string_filter')
     ],
     createdAt: Date.now(),
     updatedAt: Date.now()
@@ -194,8 +201,8 @@ function testValidation() {
     id: 'p2',
     name: 'Duplicate',
     tasks: [
-      { taskId: 't1', name: 'task', trigger: '_run_' },
-      { taskId: 't2', name: 'task', trigger: 'task' }
+      makeTask('task', '_run_', 'page_navigation'),
+      makeTask('task', 'task', 'string_extraction')
     ],
     createdAt: Date.now(),
     updatedAt: Date.now()
@@ -210,8 +217,8 @@ function testValidation() {
     id: 'p3',
     name: 'Invalid Trigger',
     tasks: [
-      { taskId: 't1', name: 'a', trigger: '_run_' },
-      { taskId: 't2', name: 'b', trigger: 'nonexistent' }
+      makeTask('a', '_run_', 'page_navigation'),
+      makeTask('b', 'nonexistent', 'string_extraction')
     ],
     createdAt: Date.now(),
     updatedAt: Date.now()
@@ -233,12 +240,12 @@ function testDAGOperations() {
     id: 'p6',
     name: 'DAG Ops',
     tasks: [
-      { taskId: 't1', name: 'root', trigger: '_run_' },
-      { taskId: 't2', name: 'a', trigger: 'root' },
-      { taskId: 't3', name: 'b', trigger: 'root' },
-      { taskId: 't4', name: 'c', trigger: 'a' },
-      { taskId: 't5', name: 'd', trigger: 'a' },
-      { taskId: 't6', name: 'e', trigger: 'b' }
+      makeTask('root', '_run_', 'page_navigation'),
+      makeTask('a', 'root', 'string_extraction'),
+      makeTask('b', 'root', 'string_extraction'),
+      makeTask('c', 'a', 'string_filter'),
+      makeTask('d', 'a', 'resource_extraction', { resourceTypes: ['image'] }),
+      makeTask('e', 'b', 'string_filter')
     ],
     createdAt: Date.now(),
     updatedAt: Date.now()

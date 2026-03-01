@@ -10,16 +10,9 @@ import type { Pipeline } from '../types'
 import type { DAGNode } from '../types'
 import { DAG } from '../dag'
 import { PipelineValidator } from '../validator'
-import type { TaskManager } from '../../task/manager'
 import type { FilterManager } from '../../filter/manager'
 import { FilterEngine } from '../../filter/engine'
-import type {
-  AnyTask,
-  StringFilterTask,
-  PageNavigationTask,
-  StringExtractionTask,
-  ResourceExtractionTask
-} from '../../task/types'
+import type { PipelineTaskCategory } from '../types'
 import type {
   TaskData,
   NodeExecutionResult,
@@ -29,20 +22,17 @@ import type {
 import { TASK_IO_MAP } from './types'
 
 export interface EngineDependencies {
-  taskManager: TaskManager
   filterManager: FilterManager
   onProgress: (event: ExecutionProgressEvent) => void
 }
 
 export class PipelineExecutionEngine {
-  private taskManager: TaskManager
   private filterManager: FilterManager
   private onProgress: (event: ExecutionProgressEvent) => void
   private browser: Browser | null = null
   private context: BrowserContext | null = null
 
   constructor(deps: EngineDependencies) {
-    this.taskManager = deps.taskManager
     this.filterManager = deps.filterManager
     this.onProgress = deps.onProgress
   }
@@ -94,7 +84,7 @@ export class PipelineExecutionEngine {
           failedNodes.add(node.name)
           results.push({
             taskName: node.name,
-            taskId: node.taskId,
+            taskId: node.taskId || node.name,
             success: false,
             output: null,
             error: '상위 Task 실패로 인해 건너뜀',
@@ -110,29 +100,11 @@ export class PipelineExecutionEngine {
         // 부모 출력 가져오기
         const parentOutput = this.getParentOutput(node, nodeOutputs, initialUrl)
 
-        // Task 정보 조회
-        const task = this.taskManager.getTask(node.taskId)
-        if (!task) {
-          failedNodes.add(node.name)
-          const result: NodeExecutionResult = {
-            taskName: node.name,
-            taskId: node.taskId,
-            success: false,
-            output: null,
-            error: `Task를 찾을 수 없습니다: ${node.taskId}`,
-            startedAt: Date.now(),
-            completedAt: Date.now()
-          }
-          results.push(result)
-          this.emitProgress(executionId, node, 'failed', result.error!)
-          continue
-        }
-
         // 입력 타입 어댑팅
-        const adaptedInput = this.adaptInput(parentOutput, task.category)
+        const adaptedInput = this.adaptInput(parentOutput, node.category)
 
-        // Task 실행
-        const result = await this.executeTask(task, adaptedInput, node)
+        // Task 실행 (인라인 config 사용)
+        const result = await this.executeTask(node.category, node.taskConfig, adaptedInput, node)
         results.push(result)
 
         if (result.success && result.output) {
@@ -173,38 +145,40 @@ export class PipelineExecutionEngine {
   }
 
   /**
-   * 개별 Task 실행
+   * 개별 Task 실행 (인라인 config 기반)
    */
   private async executeTask(
-    task: AnyTask,
+    category: PipelineTaskCategory,
+    taskConfig: Record<string, unknown>,
     input: TaskData,
     node: DAGNode
   ): Promise<NodeExecutionResult> {
     const startedAt = Date.now()
+    const taskId = node.taskId || node.name
 
     try {
       let output: TaskData
 
-      switch (task.category) {
+      switch (category) {
         case 'string_filter':
-          output = await this.executeStringFilter(task as StringFilterTask, input)
+          output = await this.executeStringFilter(taskConfig, input)
           break
         case 'page_navigation':
-          output = await this.executePageNavigation(task as PageNavigationTask, input)
+          output = await this.executePageNavigation(taskConfig, input)
           break
         case 'string_extraction':
-          output = await this.executeStringExtraction(task as StringExtractionTask, input)
+          output = await this.executeStringExtraction(taskConfig, input)
           break
         case 'resource_extraction':
-          output = await this.executeResourceExtraction(task as ResourceExtractionTask, input)
+          output = await this.executeResourceExtraction(taskConfig, input)
           break
         default:
-          throw new Error(`알 수 없는 Task 카테고리: ${(task as AnyTask).category}`)
+          throw new Error(`알 수 없는 Task 카테고리: ${category}`)
       }
 
       return {
         taskName: node.name,
-        taskId: node.taskId,
+        taskId,
         success: true,
         output,
         startedAt,
@@ -213,7 +187,7 @@ export class PipelineExecutionEngine {
     } catch (error) {
       return {
         taskName: node.name,
-        taskId: node.taskId,
+        taskId,
         success: false,
         output: null,
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -227,7 +201,7 @@ export class PipelineExecutionEngine {
    * 문자열 필터링 태스크: string[] → string[]
    */
   private async executeStringFilter(
-    task: StringFilterTask,
+    config: Record<string, unknown>,
     input: TaskData
   ): Promise<TaskData> {
     if (input.type !== 'strings') {
@@ -237,24 +211,25 @@ export class PipelineExecutionEngine {
     let result = [...input.value] // 불변: 새 배열 생성
 
     // 사전 필터 적용
-    if (task.config.preFilterId) {
-      const filter = this.filterManager.getFilter(task.config.preFilterId)
+    if (config.preFilterId) {
+      const filter = this.filterManager.getFilter(config.preFilterId as string)
       if (filter) {
         result = FilterEngine.apply(result, filter)
       }
     }
 
     // 사후 필터 적용
-    if (task.config.postFilterId) {
-      const filter = this.filterManager.getFilter(task.config.postFilterId)
+    if (config.postFilterId) {
+      const filter = this.filterManager.getFilter(config.postFilterId as string)
       if (filter) {
         result = FilterEngine.apply(result, filter)
       }
     }
 
     // Limit 적용
-    if (task.config.limit >= 0) {
-      result = result.slice(0, task.config.limit)
+    const limit = (config.limit as number) ?? -1
+    if (limit >= 0) {
+      result = result.slice(0, limit)
     }
 
     return { type: 'strings', value: result }
@@ -264,7 +239,7 @@ export class PipelineExecutionEngine {
    * 페이지 이동 태스크: string(url) → Page
    */
   private async executePageNavigation(
-    task: PageNavigationTask,
+    config: Record<string, unknown>,
     input: TaskData
   ): Promise<TaskData> {
     let targetUrl: string
@@ -284,12 +259,12 @@ export class PipelineExecutionEngine {
     const page = await this.context.newPage()
 
     await page.goto(targetUrl, {
-      waitUntil: task.config.waitUntil,
-      timeout: task.config.timeout
+      waitUntil: (config.waitUntil as 'domcontentloaded' | 'load' | 'networkidle') || 'domcontentloaded',
+      timeout: (config.timeout as number) || 30000
     })
 
     // 쿠키 동의 팝업 처리
-    if (task.config.handleCookies) {
+    if (config.handleCookies) {
       await this.handleCookieConsent(page)
     }
 
@@ -300,7 +275,7 @@ export class PipelineExecutionEngine {
    * 문자열 추출 태스크: Page → string[]
    */
   private async executeStringExtraction(
-    task: StringExtractionTask,
+    config: Record<string, unknown>,
     input: TaskData
   ): Promise<TaskData> {
     if (input.type !== 'page') {
@@ -314,7 +289,7 @@ export class PipelineExecutionEngine {
     const links: string[] = []
 
     // href 링크 추출
-    if (task.config.includeHrefLinks) {
+    if (config.includeHrefLinks) {
       const hrefLinks = await page.$$eval('a[href]', (elements, baseHref) => {
         return elements
           .map((el) => {
@@ -334,7 +309,7 @@ export class PipelineExecutionEngine {
     }
 
     // 본문 텍스트 내 URL 추출
-    if (task.config.includeTextUrls) {
+    if (config.includeTextUrls) {
       const textContent = await page.evaluate(() => document.body.innerText)
       const urlRegex = /https?:\/\/[^\s<>"')\]]+/gi
       const textUrls = textContent.match(urlRegex) || []
@@ -347,16 +322,16 @@ export class PipelineExecutionEngine {
       try {
         const linkUrl = new URL(link)
         const isInternal = linkUrl.hostname === baseDomain
-        if (isInternal) return task.config.includeRelativePaths
-        return task.config.includeAbsolutePaths
+        if (isInternal) return !!config.includeRelativePaths
+        return !!config.includeAbsolutePaths
       } catch {
         return false
       }
     })
 
     // 사후 필터 적용
-    if (task.config.postFilterId) {
-      const filter = this.filterManager.getFilter(task.config.postFilterId)
+    if (config.postFilterId) {
+      const filter = this.filterManager.getFilter(config.postFilterId as string)
       if (filter) {
         filtered = FilterEngine.apply(filtered, filter)
       }
@@ -372,7 +347,7 @@ export class PipelineExecutionEngine {
    * 리소스 추출 태스크: string[] → string[]
    */
   private async executeResourceExtraction(
-    task: ResourceExtractionTask,
+    config: Record<string, unknown>,
     input: TaskData
   ): Promise<TaskData> {
     if (input.type !== 'strings') {
@@ -388,7 +363,8 @@ export class PipelineExecutionEngine {
       js: ['.js', '.mjs']
     }
 
-    const allowedExtensions = task.config.resourceTypes.flatMap(
+    const resourceTypes = (config.resourceTypes as string[]) || []
+    const allowedExtensions = resourceTypes.flatMap(
       type => extensionMap[type] || []
     )
 
@@ -404,8 +380,8 @@ export class PipelineExecutionEngine {
     })
 
     // 필터 적용
-    if (task.config.filterId) {
-      const filter = this.filterManager.getFilter(task.config.filterId)
+    if (config.filterId) {
+      const filter = this.filterManager.getFilter(config.filterId as string)
       if (filter) {
         result = FilterEngine.apply(result, filter)
       }
@@ -571,7 +547,7 @@ export class PipelineExecutionEngine {
     this.onProgress({
       executionId,
       taskName: node.name,
-      taskId: node.taskId,
+      taskId: node.taskId || node.name,
       status,
       message,
       timestamp: Date.now()
