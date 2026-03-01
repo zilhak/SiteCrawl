@@ -1,48 +1,57 @@
-// Color Palette
+/**
+ * Color Palette
+ *
+ * 규칙:
+ * - 배경/텍스트/테두리: 순수 회색·검정·흰색만 사용
+ * - 악센트: ColorHunt 팔레트 (#0B2D72 #0992C2 #0AC4E0 #F6E7BC) + 보조색
+ *
+ * @see https://colorhunt.co/palette/0b2d720992c20ac4e0f6e7bc
+ */
 export const colors = {
-  // Primary Colors
+  // ── ColorHunt Palette ──────────────────────────
+  // Primary: 시안 블루 계열
   primary: {
-    main: '#667eea',
-    light: '#8b9df7',
-    dark: '#4c63d2',
+    main: '#0992C2',
+    light: '#0AC4E0',
+    dark: '#0B2D72',
     contrastText: '#ffffff',
   },
 
-  // Secondary Colors
+  // Secondary: 딥 네이비
   secondary: {
-    main: '#764ba2',
-    light: '#9c6bc4',
-    dark: '#5a3880',
+    main: '#0B2D72',
+    light: '#0992C2',
+    dark: '#061B45',
     contrastText: '#ffffff',
   },
 
-  // Background Colors (Dark Mode)
+  // ── Background (순수 회색/검정) ────────────────
   background: {
-    default: '#0a0e27',      // 메인 배경
-    paper: '#151a2e',        // 카드/패널 배경
-    elevated: '#1e2538',     // 호버/선택 배경
+    default: '#111111',       // 메인 배경
+    paper: '#1a1a1a',         // 카드/패널 배경
+    elevated: '#252525',      // 호버/선택 배경
   },
 
-  // Text Colors
+  // ── Text (순수 회색/흰색) ──────────────────────
   text: {
-    primary: '#e4e6eb',      // 주요 텍스트
-    secondary: '#b0b3b8',    // 보조 텍스트
-    disabled: '#6b6f76',     // 비활성 텍스트
+    primary: '#e8e8e8',       // 주요 텍스트
+    secondary: '#a0a0a0',     // 보조 텍스트
+    disabled: '#666666',      // 비활성 텍스트
   },
 
-  // Accent Colors
+  // ── Accent (ColorHunt + 보조) ──────────────────
   accent: {
-    success: '#10b981',
-    warning: '#f59e0b',
-    error: '#ef4444',
-    info: '#3b82f6',
+    success: '#10b981',       // 그린 (보조)
+    warning: '#F6E7BC',       // 웜 베이지 (ColorHunt)
+    error: '#ef4444',         // 레드 (보조)
+    info: '#0AC4E0',          // 밝은 시안 (ColorHunt)
   },
 
-  // Border Colors
-  divider: 'rgba(255, 255, 255, 0.12)',
-  border: 'rgba(255, 255, 255, 0.08)',
+  // ── Border (순수 회색) ─────────────────────────
+  divider: 'rgba(255, 255, 255, 0.10)',
+  border: 'rgba(255, 255, 255, 0.06)',
 
-  // Overlay Colors
+  // ── Overlay ────────────────────────────────────
   overlay: {
     light: 'rgba(255, 255, 255, 0.3)',
     medium: 'rgba(255, 255, 255, 0.5)',

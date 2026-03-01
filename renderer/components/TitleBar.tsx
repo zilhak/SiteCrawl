@@ -22,7 +22,7 @@ export default function TitleBar() {
     width: 46,
     height: '100%',
     color: 'grey.400',
-    '&:hover': { bgcolor: 'rgba(255,255,255,0.08)' },
+    '&:hover': { bgcolor: 'action.hover' },
     '& svg': { fontSize: 16 }
   }
 
@@ -31,9 +31,9 @@ export default function TitleBar() {
       height: 32,
       display: 'flex',
       alignItems: 'center',
-      bgcolor: '#1e1e1e',
+      bgcolor: 'background.default',
       borderBottom: '1px solid',
-      borderColor: 'rgba(255,255,255,0.06)',
+      borderColor: 'divider',
       WebkitAppRegion: 'drag',
       userSelect: 'none',
       flexShrink: 0,
@@ -76,7 +76,7 @@ export default function TitleBar() {
           onClick={() => window.windowControl.close()}
           sx={{
             ...btnSx,
-            '&:hover': { bgcolor: '#e81123', color: 'white' }
+            '&:hover': { bgcolor: 'error.main', color: 'white' }
           }}
           disableRipple
         >

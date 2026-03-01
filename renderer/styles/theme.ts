@@ -41,37 +41,25 @@ export const theme = createTheme({
   },
   typography: {
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
-    h1: {
-      fontWeight: 700,
-    },
-    h2: {
-      fontWeight: 700,
-    },
-    h3: {
-      fontWeight: 600,
-    },
-    h4: {
-      fontWeight: 600,
-    },
-    h5: {
-      fontWeight: 600,
-    },
-    h6: {
-      fontWeight: 600,
-    },
+    h1: { fontWeight: 700 },
+    h2: { fontWeight: 700 },
+    h3: { fontWeight: 600 },
+    h4: { fontWeight: 600 },
+    h5: { fontWeight: 600 },
+    h6: { fontWeight: 600 },
   },
   components: {
     MuiPaper: {
       styleOverrides: {
         root: {
-          backgroundImage: 'none', // MUI 기본 그라디언트 제거
+          backgroundImage: 'none',
         },
       },
     },
     MuiButton: {
       styleOverrides: {
         root: {
-          textTransform: 'none', // 버튼 텍스트 대문자 변환 제거
+          textTransform: 'none',
           borderRadius: 8,
         },
       },
