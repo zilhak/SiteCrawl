@@ -17,6 +17,7 @@ export interface TaskNodeData {
   taskConfig?: Record<string, unknown>
   isRoot?: boolean
   isConfigured: boolean
+  isSelected?: boolean
   onAddChild: (nodeId: string) => void
   onDelete: (nodeId: string) => void
   onSelect: (nodeId: string) => void
@@ -45,7 +46,7 @@ export default function TaskNode({ data }: { data: TaskNodeData }) {
       />
 
       <Paper
-        elevation={isHovered ? 4 : 1}
+        elevation={data.isSelected ? 6 : isHovered ? 4 : 1}
         sx={{
           px: 1.5,
           py: 0.75,
@@ -58,14 +59,21 @@ export default function TaskNode({ data }: { data: TaskNodeData }) {
               : 'background.default',
           color: data.isRoot ? 'white' : 'text.primary',
           transition: 'all 0.2s',
-          border: data.isConfigured || data.isRoot
-            ? '1.5px solid transparent'
-            : '1.5px dashed',
-          borderColor: isHovered
-            ? 'primary.main'
+          border: data.isSelected
+            ? '1.5px solid'
             : data.isConfigured || data.isRoot
-              ? 'transparent'
-              : 'grey.500',
+              ? '1.5px solid transparent'
+              : '1.5px dashed',
+          borderColor: data.isSelected
+            ? 'primary.light'
+            : isHovered
+              ? 'primary.main'
+              : data.isConfigured || data.isRoot
+                ? 'transparent'
+                : 'grey.500',
+          boxShadow: data.isSelected
+            ? (theme: any) => `0 0 0 2px ${theme.palette.primary.main}40`
+            : undefined,
         }}
       >
         {data.isRoot ? (

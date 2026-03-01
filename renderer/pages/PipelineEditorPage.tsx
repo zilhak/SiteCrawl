@@ -10,12 +10,10 @@ import {
   IconButton,
   Stack,
   AppBar,
-  Toolbar,
-  Divider
+  Toolbar
 } from '@mui/material'
 import SaveIcon from '@mui/icons-material/Save'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
 import ReactFlow, {
   Node,
   Edge,
@@ -289,11 +287,22 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
   }, [])
 
   const handleSelectNode = useCallback((nodeId: string) => {
-    setSelectedNodeId(nodeId)
+    setSelectedNodeId(prev => {
+      // 노드 data에 isSelected 반영
+      setNodes(nds => nds.map(n => ({
+        ...n,
+        data: { ...n.data, isSelected: n.id === nodeId }
+      })))
+      return nodeId
+    })
   }, [])
 
   const handlePaneClick = useCallback(() => {
     setSelectedNodeId(null)
+    setNodes(nds => nds.map(n => ({
+      ...n,
+      data: { ...n.data, isSelected: false }
+    })))
   }, [])
 
   const handleUpdateNode = useCallback((updates: Partial<TaskPropertyData>) => {
@@ -394,10 +403,40 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
   const parentNode = parentEdge ? nodes.find(n => n.id === parentEdge.source) : null
   const parentData = parentNode?.data as TaskNodeData | undefined
 
+  // --- JSON 뷰어용 파이프라인 데이터 구축 ---
+
+  const buildPipelineJson = useCallback(() => {
+    const nodeById = new Map<string, Node>()
+    nodes.forEach(n => nodeById.set(n.id, n))
+
+    const tasks: PipelineTask[] = []
+    for (const edge of edges) {
+      const targetNode = nodeById.get(edge.target)
+      const sourceNode = nodeById.get(edge.source)
+      if (!targetNode || !sourceNode) continue
+      const td = targetNode.data as TaskNodeData
+      const sd = sourceNode.data as TaskNodeData
+      if (!td.taskCategory) continue
+
+      tasks.push({
+        name: td.taskName,
+        trigger: sd.taskName,
+        category: td.taskCategory,
+        taskConfig: td.taskConfig || {}
+      })
+    }
+
+    return {
+      name: pipelineName || '',
+      description: pipelineDesc || '',
+      tasks
+    }
+  }, [nodes, edges, pipelineName, pipelineDesc])
+
   return (
     <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
       {/* Header */}
-      <AppBar position="static" color="default" elevation={1}>
+      <AppBar position="static" color="default" elevation={0} sx={{ borderBottom: 1, borderColor: 'divider' }}>
         <Toolbar>
           <IconButton edge="start" onClick={onClose} sx={{ mr: 2 }}>
             <ArrowBackIcon />
@@ -452,79 +491,75 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
             minZoom={0.5}
             maxZoom={1.5}
             defaultViewport={{ x: 0, y: 0, zoom: 1 }}
+            proOptions={{ hideAttribution: true }}
           />
         </Box>
 
-        {/* Right: Property Panel */}
+        {/* Right: JSON Viewer + Property Panel */}
         <Box sx={{
           width: 360,
-          bgcolor: 'background.paper',
           borderLeft: 1,
           borderColor: 'divider',
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden'
         }}>
-          {selectedNode && !selectedNode.data.isRoot ? (
-            <TaskPropertyPanel
-              data={{
-                taskName: (selectedNode.data as TaskNodeData).taskName,
-                taskCategory: (selectedNode.data as TaskNodeData).taskCategory,
-                taskConfig: (selectedNode.data as TaskNodeData).taskConfig
-              }}
-              parentCategory={parentData?.taskCategory}
-              isParentRoot={parentData?.isRoot}
-              filters={filters}
-              onUpdate={handleUpdateNode}
-              onClose={() => setSelectedNodeId(null)}
-            />
-          ) : (
-            <Box sx={{ p: 3 }}>
-              <Stack spacing={3}>
-                <Box>
-                  <Typography variant="h6" fontWeight={600} gutterBottom>
-                    파이프라인 에디터
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    노드를 추가하고 설정하여 파이프라인을 구성하세요.
-                  </Typography>
-                </Box>
+          {/* 상단: JSON 뷰어 (선택 시 50%, 미선택 시 100%) */}
+          <Box sx={{
+            flex: selectedNode && !selectedNode.data.isRoot ? '0 0 50%' : 1,
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            bgcolor: 'background.default'
+          }}>
+            <Box sx={{ px: 1.5, py: 1, borderBottom: 1, borderColor: 'divider', bgcolor: 'background.paper' }}>
+              <Typography sx={{ fontSize: '11px', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                Pipeline JSON
+              </Typography>
+            </Box>
+            <Box sx={{
+              flex: 1,
+              overflow: 'auto',
+              p: 1.5,
+              fontFamily: 'monospace',
+              fontSize: '11px',
+              lineHeight: 1.5,
+              color: 'text.secondary',
+              whiteSpace: 'pre',
+              '&::-webkit-scrollbar': { width: 6 },
+              '&::-webkit-scrollbar-thumb': { bgcolor: 'grey.700', borderRadius: 3 },
+            }}>
+              {JSON.stringify(buildPipelineJson(), null, 2)}
+            </Box>
+          </Box>
 
-                <Divider />
-
-                <Stack spacing={1.5}>
-                  <Stack direction="row" spacing={1} alignItems="center">
-                    <InfoOutlinedIcon color="action" sx={{ fontSize: 18 }} />
-                    <Typography variant="body2" color="text.secondary">
-                      노드에 마우스를 올리면 + 버튼이 나타납니다
-                    </Typography>
-                  </Stack>
-                  <Stack direction="row" spacing={1} alignItems="center">
-                    <InfoOutlinedIcon color="action" sx={{ fontSize: 18 }} />
-                    <Typography variant="body2" color="text.secondary">
-                      노드를 클릭하면 속성을 설정할 수 있습니다
-                    </Typography>
-                  </Stack>
-                  <Stack direction="row" spacing={1} alignItems="center">
-                    <InfoOutlinedIcon color="action" sx={{ fontSize: 18 }} />
-                    <Typography variant="body2" color="text.secondary">
-                      점선 노드는 아직 설정되지 않은 상태입니다
-                    </Typography>
-                  </Stack>
-                </Stack>
-
-                <Divider />
-
-                <Box>
-                  <Typography variant="subtitle2" gutterBottom>요약</Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    전체 노드: {nodes.filter(n => !n.data.isRoot).length}개
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    미설정 노드: {nodes.filter(n => !n.data.isRoot && !n.data.isConfigured).length}개
-                  </Typography>
-                </Box>
-              </Stack>
+          {/* 하단: 노드 속성 패널 (선택 시에만 표시, 50%) */}
+          {selectedNode && !selectedNode.data.isRoot && (
+            <Box sx={{
+              flex: '0 0 50%',
+              borderTop: 1,
+              borderColor: 'divider',
+              overflow: 'hidden',
+              bgcolor: 'background.paper'
+            }}>
+              <TaskPropertyPanel
+                data={{
+                  taskName: (selectedNode.data as TaskNodeData).taskName,
+                  taskCategory: (selectedNode.data as TaskNodeData).taskCategory,
+                  taskConfig: (selectedNode.data as TaskNodeData).taskConfig
+                }}
+                parentCategory={parentData?.taskCategory}
+                isParentRoot={parentData?.isRoot}
+                filters={filters}
+                onUpdate={handleUpdateNode}
+                onClose={() => {
+                  setSelectedNodeId(null)
+                  setNodes(nds => nds.map(n => ({
+                    ...n,
+                    data: { ...n.data, isSelected: false }
+                  })))
+                }}
+              />
             </Box>
           )}
         </Box>
