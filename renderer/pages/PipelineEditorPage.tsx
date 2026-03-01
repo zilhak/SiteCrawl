@@ -212,69 +212,81 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
 
   // --- 핸들러 ---
 
+  // nodeCounter를 ref로 관리하여 콜백이 안정적 참조 유지
+  const nodeCounterRef = { current: nodeCounter }
+  nodeCounterRef.current = nodeCounter
+
   const handleAddChild = useCallback((parentId: string) => {
-    if (parentId === 'root') {
-      const rootChildren = edges.filter(e => e.source === 'root')
-      if (rootChildren.length > 0) {
-        alert('_run_에는 하나의 태스크만 연결할 수 있습니다.')
-        return
+    // setEdges/setNodes 함수형 업데이트로만 상태 접근 → stale closure 방지
+    setEdges(currentEdges => {
+      if (parentId === 'root') {
+        const rootChildren = currentEdges.filter(e => e.source === 'root')
+        if (rootChildren.length > 0) {
+          alert('_run_에는 하나의 태스크만 연결할 수 있습니다.')
+          return currentEdges
+        }
       }
-    }
 
-    const newNodeId = `node-${nodeCounter}`
-    setNodeCounter(prev => prev + 1)
+      const counter = nodeCounterRef.current
+      const newNodeId = `node-${counter}`
+      setNodeCounter(counter + 1)
 
-    const parentNode = nodes.find(n => n.id === parentId)
-    if (!parentNode) return
+      const childCount = currentEdges.filter(e => e.source === parentId).length
 
-    const childCount = edges.filter(e => e.source === parentId).length
+      setNodes(currentNodes => {
+        const parentNode = currentNodes.find(n => n.id === parentId)
+        if (!parentNode) return currentNodes
 
-    const newNode: Node = {
-      id: newNodeId,
-      type: 'taskNode',
-      position: {
-        x: parentNode.position.x + childCount * 250,
-        y: parentNode.position.y + 150
-      },
-      data: {
-        nodeId: newNodeId,
-        taskName: `task_${nodeCounter}`,
-        isRoot: false,
-        isConfigured: false,
-        onAddChild: handleAddChild,
-        onDelete: handleDeleteNode,
-        onSelect: handleSelectNode
-      } as TaskNodeData
-    }
+        const newNode: Node = {
+          id: newNodeId,
+          type: 'taskNode',
+          position: {
+            x: parentNode.position.x + childCount * 250,
+            y: parentNode.position.y + 150
+          },
+          data: {
+            nodeId: newNodeId,
+            taskName: `task_${counter}`,
+            isRoot: false,
+            isConfigured: false,
+            onAddChild: handleAddChild,
+            onDelete: handleDeleteNode,
+            onSelect: handleSelectNode
+          } as TaskNodeData
+        }
 
-    const newEdge: Edge = {
-      id: `edge-${parentId}-${newNodeId}`,
-      source: parentId,
-      target: newNodeId,
-      type: 'smoothstep',
-      animated: false,
-      markerEnd: { type: MarkerType.ArrowClosed }
-    }
+        return [...currentNodes, newNode]
+      })
 
-    setNodes(nds => [...nds, newNode])
-    setEdges(eds => [...eds, newEdge])
-    setSelectedNodeId(newNodeId)
-  }, [nodes, edges, nodeCounter])
+      setSelectedNodeId(newNodeId)
+
+      const newEdge: Edge = {
+        id: `edge-${parentId}-${newNodeId}`,
+        source: parentId,
+        target: newNodeId,
+        type: 'smoothstep',
+        animated: false,
+        markerEnd: { type: MarkerType.ArrowClosed }
+      }
+
+      return [...currentEdges, newEdge]
+    })
+  }, [])
 
   const handleDeleteNode = useCallback((nodeId: string) => {
-    const findDescendants = (id: string): string[] => {
-      const children = edges.filter(e => e.source === id).map(e => e.target)
-      return [id, ...children.flatMap(findDescendants)]
-    }
+    setEdges(currentEdges => {
+      const findDescendants = (id: string): string[] => {
+        const children = currentEdges.filter(e => e.source === id).map(e => e.target)
+        return [id, ...children.flatMap(findDescendants)]
+      }
 
-    const toDelete = findDescendants(nodeId)
-    setNodes(nds => nds.filter(n => !toDelete.includes(n.id)))
-    setEdges(eds => eds.filter(e => !toDelete.includes(e.source) && !toDelete.includes(e.target)))
+      const toDelete = findDescendants(nodeId)
+      setNodes(nds => nds.filter(n => !toDelete.includes(n.id)))
+      setSelectedNodeId(prev => prev && toDelete.includes(prev) ? null : prev)
 
-    if (selectedNodeId && toDelete.includes(selectedNodeId)) {
-      setSelectedNodeId(null)
-    }
-  }, [edges, selectedNodeId])
+      return currentEdges.filter(e => !toDelete.includes(e.source) && !toDelete.includes(e.target))
+    })
+  }, [])
 
   const handleSelectNode = useCallback((nodeId: string) => {
     setSelectedNodeId(nodeId)
