@@ -135,19 +135,23 @@ const setupIpcHandlers = (window: BrowserWindow) => {
 
     if (!result.canceled && result.filePaths.length > 0) {
       const selectedPath = result.filePaths[0]
-      historyDB.setDatabasePath(selectedPath)
 
-      // Pipeline & Task & Filter 데이터베이스 초기화
-      const db = historyDB.getDatabase()
-      if (db) {
-        pipelineDB = new PipelineDatabase(db)
-        pipelineManager = new PipelineManager(pipelineDB)
+      // 이미 같은 경로로 활성화되어 있지 않으면 초기화
+      if (!historyDB.isActive() || !pipelineManager || !taskManager || !filterManager) {
+        historyDB.setDatabasePath(selectedPath)
 
-        taskDB = new TaskDatabase(db)
-        taskManager = new TaskManager(taskDB)
+        // Pipeline & Task & Filter 데이터베이스 초기화
+        const db = historyDB.getDatabase()
+        if (db) {
+          pipelineDB = new PipelineDatabase(db)
+          pipelineManager = new PipelineManager(pipelineDB)
 
-        filterDB = new FilterDatabase(db)
-        filterManager = new FilterManager(filterDB)
+          taskDB = new TaskDatabase(db)
+          taskManager = new TaskManager(taskDB)
+
+          filterDB = new FilterDatabase(db)
+          filterManager = new FilterManager(filterDB)
+        }
       }
 
       return selectedPath
@@ -159,6 +163,12 @@ const setupIpcHandlers = (window: BrowserWindow) => {
   // 저장 경로 설정
   ipcMain.handle('storage:set-path', async (_event, storagePath: string) => {
     try {
+      // 이미 같은 경로로 활성화되어 있으면 중복 초기화 방지
+      if (historyDB.isActive() && pipelineManager && taskManager && filterManager) {
+        appConfig.set('storagePath', storagePath)
+        return true
+      }
+
       historyDB.setDatabasePath(storagePath)
 
       // Pipeline & Task & Filter 데이터베이스 초기화
