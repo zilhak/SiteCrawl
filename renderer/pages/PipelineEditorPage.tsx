@@ -495,73 +495,68 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
           />
         </Box>
 
-        {/* Right: JSON Viewer + Property Panel */}
+        {/* 노드 속성 패널: 선택 시에만 캔버스 우측에 표시 */}
+        {selectedNode && !selectedNode.data.isRoot && (
+          <Box sx={{
+            width: 300,
+            borderLeft: 1,
+            borderColor: 'divider',
+            overflow: 'hidden',
+            bgcolor: 'background.paper',
+            display: 'flex',
+            flexDirection: 'column',
+          }}>
+            <TaskPropertyPanel
+              data={{
+                taskName: (selectedNode.data as TaskNodeData).taskName,
+                taskCategory: (selectedNode.data as TaskNodeData).taskCategory,
+                taskConfig: (selectedNode.data as TaskNodeData).taskConfig
+              }}
+              parentCategory={parentData?.taskCategory}
+              isParentRoot={parentData?.isRoot}
+              filters={filters}
+              onUpdate={handleUpdateNode}
+              onClose={() => {
+                setSelectedNodeId(null)
+                setNodes(nds => nds.map(n => ({
+                  ...n,
+                  data: { ...n.data, isSelected: false }
+                })))
+              }}
+            />
+          </Box>
+        )}
+
+        {/* 우측: JSON 뷰어 (항상 표시) */}
         <Box sx={{
-          width: 360,
+          width: 280,
           borderLeft: 1,
           borderColor: 'divider',
           display: 'flex',
           flexDirection: 'column',
-          overflow: 'hidden'
+          overflow: 'hidden',
+          bgcolor: 'background.default'
         }}>
-          {/* 상단: JSON 뷰어 (선택 시 50%, 미선택 시 100%) */}
-          <Box sx={{
-            flex: selectedNode && !selectedNode.data.isRoot ? '0 0 50%' : 1,
-            display: 'flex',
-            flexDirection: 'column',
-            overflow: 'hidden',
-            bgcolor: 'background.default'
-          }}>
-            <Box sx={{ px: 1.5, py: 1, borderBottom: 1, borderColor: 'divider', bgcolor: 'background.paper' }}>
-              <Typography sx={{ fontSize: '11px', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                Pipeline JSON
-              </Typography>
-            </Box>
-            <Box sx={{
-              flex: 1,
-              overflow: 'auto',
-              p: 1.5,
-              fontFamily: 'monospace',
-              fontSize: '11px',
-              lineHeight: 1.5,
-              color: 'text.secondary',
-              whiteSpace: 'pre',
-              '&::-webkit-scrollbar': { width: 6 },
-              '&::-webkit-scrollbar-thumb': { bgcolor: 'grey.700', borderRadius: 3 },
-            }}>
-              {JSON.stringify(buildPipelineJson(), null, 2)}
-            </Box>
+          <Box sx={{ px: 1.5, py: 0.75, borderBottom: 1, borderColor: 'divider', bgcolor: 'background.paper' }}>
+            <Typography sx={{ fontSize: '11px', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              Pipeline JSON
+            </Typography>
           </Box>
-
-          {/* 하단: 노드 속성 패널 (선택 시에만 표시, 50%) */}
-          {selectedNode && !selectedNode.data.isRoot && (
-            <Box sx={{
-              flex: '0 0 50%',
-              borderTop: 1,
-              borderColor: 'divider',
-              overflow: 'hidden',
-              bgcolor: 'background.paper'
-            }}>
-              <TaskPropertyPanel
-                data={{
-                  taskName: (selectedNode.data as TaskNodeData).taskName,
-                  taskCategory: (selectedNode.data as TaskNodeData).taskCategory,
-                  taskConfig: (selectedNode.data as TaskNodeData).taskConfig
-                }}
-                parentCategory={parentData?.taskCategory}
-                isParentRoot={parentData?.isRoot}
-                filters={filters}
-                onUpdate={handleUpdateNode}
-                onClose={() => {
-                  setSelectedNodeId(null)
-                  setNodes(nds => nds.map(n => ({
-                    ...n,
-                    data: { ...n.data, isSelected: false }
-                  })))
-                }}
-              />
-            </Box>
-          )}
+          <Box sx={{
+            flex: 1,
+            overflow: 'auto',
+            p: 1.5,
+            fontFamily: 'monospace',
+            fontSize: '11px',
+            lineHeight: 1.5,
+            color: '#d4d4d4',
+            bgcolor: '#1e1e1e',
+            whiteSpace: 'pre',
+            '&::-webkit-scrollbar': { width: 6 },
+            '&::-webkit-scrollbar-thumb': { bgcolor: 'grey.700', borderRadius: 3 },
+          }}>
+            {JSON.stringify(buildPipelineJson(), null, 2)}
+          </Box>
         </Box>
       </Box>
     </Box>
