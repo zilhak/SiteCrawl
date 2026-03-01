@@ -45,11 +45,11 @@ export default function TaskNode({ data }: { data: TaskNodeData }) {
       />
 
       <Paper
-        elevation={isHovered ? 6 : 2}
+        elevation={isHovered ? 4 : 1}
         sx={{
-          px: 3,
-          py: 1.5,
-          width: 220,
+          px: 1.5,
+          py: 0.75,
+          width: 140,
           textAlign: 'center',
           bgcolor: data.isRoot
             ? 'primary.main'
@@ -59,8 +59,8 @@ export default function TaskNode({ data }: { data: TaskNodeData }) {
           color: data.isRoot ? 'white' : 'text.primary',
           transition: 'all 0.2s',
           border: data.isConfigured || data.isRoot
-            ? '2px solid transparent'
-            : '2px dashed',
+            ? '1.5px solid transparent'
+            : '1.5px dashed',
           borderColor: isHovered
             ? 'primary.main'
             : data.isConfigured || data.isRoot
@@ -69,23 +69,23 @@ export default function TaskNode({ data }: { data: TaskNodeData }) {
         }}
       >
         {data.isRoot ? (
-          <Typography variant="body2" fontWeight={700}>
+          <Typography sx={{ fontSize: '11px', fontWeight: 700 }}>
             _run_
           </Typography>
         ) : data.isConfigured && data.taskCategory ? (
-          <Stack spacing={0.5} alignItems="center">
-            <Typography variant="body2" fontWeight={600} noWrap>
+          <Stack spacing={0.25} alignItems="center">
+            <Typography sx={{ fontSize: '11px', fontWeight: 600 }} noWrap>
               {data.taskName}
             </Typography>
             <Chip
               label={CATEGORY_LABELS[data.taskCategory]}
               size="small"
               color={CATEGORY_COLORS[data.taskCategory]}
-              sx={{ height: 20, fontSize: '11px' }}
+              sx={{ height: 16, fontSize: '9px', '& .MuiChip-label': { px: 0.75 } }}
             />
           </Stack>
         ) : (
-          <Typography variant="body2" color="text.secondary" fontStyle="italic">
+          <Typography sx={{ fontSize: '10px', color: 'text.secondary', fontStyle: 'italic' }}>
             클릭하여 설정
           </Typography>
         )}
@@ -97,14 +97,14 @@ export default function TaskNode({ data }: { data: TaskNodeData }) {
           size="small"
           sx={{
             position: 'absolute',
-            bottom: -14,
+            bottom: -10,
             left: '50%',
             transform: 'translateX(-50%)',
             bgcolor: 'primary.main',
             color: 'white',
-            width: 28,
-            height: 28,
-            boxShadow: 2,
+            width: 20,
+            height: 20,
+            boxShadow: 1,
             '&:hover': { bgcolor: 'primary.dark' },
             zIndex: 1000
           }}
@@ -113,7 +113,7 @@ export default function TaskNode({ data }: { data: TaskNodeData }) {
             data.onAddChild(data.nodeId)
           }}
         >
-          <AddIcon fontSize="small" />
+          <AddIcon sx={{ fontSize: 14 }} />
         </IconButton>
       )}
 
@@ -123,13 +123,13 @@ export default function TaskNode({ data }: { data: TaskNodeData }) {
           size="small"
           sx={{
             position: 'absolute',
-            top: -12,
-            right: -12,
+            top: -8,
+            right: -8,
             bgcolor: 'error.main',
             color: 'white',
-            width: 24,
-            height: 24,
-            boxShadow: 2,
+            width: 18,
+            height: 18,
+            boxShadow: 1,
             '&:hover': { bgcolor: 'error.dark' },
             zIndex: 1000
           }}
@@ -138,7 +138,7 @@ export default function TaskNode({ data }: { data: TaskNodeData }) {
             data.onDelete(data.nodeId)
           }}
         >
-          <DeleteIcon sx={{ fontSize: 16 }} />
+          <DeleteIcon sx={{ fontSize: 12 }} />
         </IconButton>
       )}
 

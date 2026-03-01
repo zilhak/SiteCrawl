@@ -152,8 +152,8 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
           id: nodeId,
           type: 'taskNode',
           position: {
-            x: parentNode.position.x + index * 250,
-            y: parentNode.position.y + 150
+            x: parentNode.position.x + index * 170,
+            y: parentNode.position.y + 80
           },
           data: {
             nodeId,
@@ -241,8 +241,8 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
           id: newNodeId,
           type: 'taskNode',
           position: {
-            x: parentNode.position.x + childCount * 250,
-            y: parentNode.position.y + 150
+            x: parentNode.position.x + childCount * 170,
+            y: parentNode.position.y + 80
           },
           data: {
             nodeId: newNodeId,
