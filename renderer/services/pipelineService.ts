@@ -80,17 +80,17 @@ export const pipelineService = {
   },
 
   onExecutionProgress(callback: (event: unknown) => void): void {
-    if (!window.pipeline) return
+    if (!window.pipeline?.onExecutionProgress) return
     window.pipeline.onExecutionProgress(callback as (event: import('../types').ExecutionProgressEvent) => void)
   },
 
   onExecutionComplete(callback: (result: unknown) => void): void {
-    if (!window.pipeline) return
+    if (!window.pipeline?.onExecutionComplete) return
     window.pipeline.onExecutionComplete(callback as (result: PipelineExecutionResult) => void)
   },
 
   onExecutionError(callback: (error: string) => void): void {
-    if (!window.pipeline) return
+    if (!window.pipeline?.onExecutionError) return
     window.pipeline.onExecutionError(callback)
   }
 }
