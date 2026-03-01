@@ -1,12 +1,16 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import * as path from 'path'
+import { randomUUID } from 'crypto'
 import { Crawler } from './crawler'
 import type { CrawlOptions, LoginOptions } from './crawler'
 import { HistoryDatabase } from './database'
 import { PipelineDatabase, PipelineManager } from './pipeline'
 import type { Pipeline, PipelineTask } from './pipeline/types'
+import { PipelineExecutionEngine } from './pipeline/execution'
 import { TaskDatabase, TaskManager } from './task'
-import type { CreateCrawlTaskDTO, CreateActionTaskDTO, CrawlTask, ActionTask } from './task/types'
+import type { CreateTaskDTO, TaskCategory } from './task/types'
+import { FilterDatabase, FilterManager } from './filter'
+import type { CreateFilterDTO } from './filter/types'
 import { appConfig } from './config'
 
 const isDev = !app.isPackaged
@@ -17,6 +21,8 @@ let pipelineDB: PipelineDatabase | null = null
 let pipelineManager: PipelineManager | null = null
 let taskDB: TaskDatabase | null = null
 let taskManager: TaskManager | null = null
+let filterDB: FilterDatabase | null = null
+let filterManager: FilterManager | null = null
 
 const createWindow = () => {
   mainWindow = new BrowserWindow({
@@ -131,7 +137,7 @@ const setupIpcHandlers = (window: BrowserWindow) => {
       const selectedPath = result.filePaths[0]
       historyDB.setDatabasePath(selectedPath)
 
-      // Pipeline & Task 데이터베이스 초기화
+      // Pipeline & Task & Filter 데이터베이스 초기화
       const db = historyDB.getDatabase()
       if (db) {
         pipelineDB = new PipelineDatabase(db)
@@ -139,6 +145,9 @@ const setupIpcHandlers = (window: BrowserWindow) => {
 
         taskDB = new TaskDatabase(db)
         taskManager = new TaskManager(taskDB)
+
+        filterDB = new FilterDatabase(db)
+        filterManager = new FilterManager(filterDB)
       }
 
       return selectedPath
@@ -152,7 +161,7 @@ const setupIpcHandlers = (window: BrowserWindow) => {
     try {
       historyDB.setDatabasePath(storagePath)
 
-      // Pipeline & Task 데이터베이스 초기화
+      // Pipeline & Task & Filter 데이터베이스 초기화
       const db = historyDB.getDatabase()
       if (db) {
         pipelineDB = new PipelineDatabase(db)
@@ -160,6 +169,9 @@ const setupIpcHandlers = (window: BrowserWindow) => {
 
         taskDB = new TaskDatabase(db)
         taskManager = new TaskManager(taskDB)
+
+        filterDB = new FilterDatabase(db)
+        filterManager = new FilterManager(filterDB)
       }
 
       // 경로 저장
@@ -282,109 +294,154 @@ const setupIpcHandlers = (window: BrowserWindow) => {
     return pipelineManager.clonePipeline(pipelineId, newName)
   })
 
-  // Task CRUD - CrawlTask
-  ipcMain.handle('task:create-crawl', async (_event, dto: unknown) => {
-    if (!taskManager) {
-      throw new Error('저장소가 설정되지 않았습니다.')
-    }
-    return taskManager.createCrawlTask(dto as CreateCrawlTaskDTO)
+  // Task CRUD (통합)
+  ipcMain.handle('task:create', async (_event, dto: unknown) => {
+    if (!taskManager) throw new Error('저장소가 설정되지 않았습니다.')
+    return taskManager.createTask(dto as CreateTaskDTO)
   })
 
-  ipcMain.handle('task:update-crawl', async (_event, id: string, updates: unknown) => {
-    if (!taskManager) {
-      throw new Error('저장소가 설정되지 않았습니다.')
-    }
-    return taskManager.updateCrawlTask(id, updates as Partial<CreateCrawlTaskDTO>)
+  ipcMain.handle('task:update', async (_event, id: string, updates: unknown) => {
+    if (!taskManager) throw new Error('저장소가 설정되지 않았습니다.')
+    return taskManager.updateTask(id, updates as Partial<CreateTaskDTO>)
   })
 
-  // Task CRUD - ActionTask
-  ipcMain.handle('task:create-action', async (_event, dto: unknown) => {
-    if (!taskManager) {
-      throw new Error('저장소가 설정되지 않았습니다.')
-    }
-    return taskManager.createActionTask(dto as CreateActionTaskDTO)
-  })
-
-  ipcMain.handle('task:update-action', async (_event, id: string, updates: unknown) => {
-    if (!taskManager) {
-      throw new Error('저장소가 설정되지 않았습니다.')
-    }
-    return taskManager.updateActionTask(id, updates as Partial<CreateActionTaskDTO>)
-  })
-
-  // Task 조회
   ipcMain.handle('task:get', async (_event, id: string) => {
-    if (!taskManager) return null
+    if (!taskManager) throw new Error('저장소가 설정되지 않았습니다.')
     return taskManager.getTask(id)
   })
 
   ipcMain.handle('task:get-all', async () => {
-    if (!taskManager) return []
+    if (!taskManager) throw new Error('저장소가 설정되지 않았습니다.')
     return taskManager.getAllTasks()
   })
 
-  ipcMain.handle('task:get-crawl', async () => {
-    if (!taskManager) return []
-    return taskManager.getCrawlTasks()
-  })
-
-  ipcMain.handle('task:get-action', async () => {
-    if (!taskManager) return []
-    return taskManager.getActionTasks()
+  ipcMain.handle('task:get-by-category', async (_event, category: string) => {
+    if (!taskManager) throw new Error('저장소가 설정되지 않았습니다.')
+    return taskManager.getTasksByCategory(category as TaskCategory)
   })
 
   ipcMain.handle('task:search', async (_event, query: string) => {
-    if (!taskManager) return []
+    if (!taskManager) throw new Error('저장소가 설정되지 않았습니다.')
     return taskManager.searchTasks(query)
   })
 
-  // Task 삭제
   ipcMain.handle('task:delete', async (_event, id: string) => {
-    if (!taskManager) return false
+    if (!taskManager) throw new Error('저장소가 설정되지 않았습니다.')
     return taskManager.deleteTask(id)
   })
 
   ipcMain.handle('task:delete-multiple', async (_event, ids: string[]) => {
-    if (!taskManager) return 0
+    if (!taskManager) throw new Error('저장소가 설정되지 않았습니다.')
     return taskManager.deleteTasks(ids)
   })
 
-  // Task 빠른 생성 (자동 이름)
-  ipcMain.handle('task:create-quick-crawl', async () => {
-    if (!taskManager) {
+  ipcMain.handle('task:create-quick', async (_event, category: string) => {
+    if (!taskManager) throw new Error('저장소가 설정되지 않았습니다.')
+    return taskManager.createQuickTask(category as TaskCategory)
+  })
+
+  ipcMain.handle('task:get-paginated', async (_event, category: string, page: number, pageSize: number) => {
+    if (!taskManager) throw new Error('저장소가 설정되지 않았습니다.')
+    return taskManager.getTasksPaginated(category as TaskCategory, page, pageSize)
+  })
+
+  ipcMain.handle('task:validate', async (_event, task: unknown) => {
+    if (!taskManager) throw new Error('저장소가 설정되지 않았습니다.')
+    return taskManager.validateTask(task as any)
+  })
+
+  // Filter CRUD
+  ipcMain.handle('filter:create', async (_event, dto: unknown) => {
+    if (!filterManager) throw new Error('저장소가 설정되지 않았습니다.')
+    return filterManager.createFilter(dto as CreateFilterDTO)
+  })
+
+  ipcMain.handle('filter:get', async (_event, id: string) => {
+    if (!filterManager) throw new Error('저장소가 설정되지 않았습니다.')
+    return filterManager.getFilter(id)
+  })
+
+  ipcMain.handle('filter:get-all', async () => {
+    if (!filterManager) throw new Error('저장소가 설정되지 않았습니다.')
+    return filterManager.getAllFilters()
+  })
+
+  ipcMain.handle('filter:update', async (_event, id: string, updates: unknown) => {
+    if (!filterManager) throw new Error('저장소가 설정되지 않았습니다.')
+    return filterManager.updateFilter(id, updates as Partial<CreateFilterDTO>)
+  })
+
+  ipcMain.handle('filter:delete', async (_event, id: string) => {
+    if (!filterManager) throw new Error('저장소가 설정되지 않았습니다.')
+    return filterManager.deleteFilter(id)
+  })
+
+  // Pipeline 실행
+  ipcMain.handle('pipeline:execute', async (_event, pipelineId: string, initialUrl: string) => {
+    if (!pipelineManager || !taskManager || !filterManager) {
       throw new Error('저장소가 설정되지 않았습니다.')
     }
-    return taskManager.createQuickCrawlTask()
-  })
 
-  ipcMain.handle('task:create-quick-action', async () => {
-    if (!taskManager) {
-      throw new Error('저장소가 설정되지 않았습니다.')
-    }
-    return taskManager.createQuickActionTask()
-  })
+    const pipeline = pipelineManager.getPipeline(pipelineId)
+    if (!pipeline) throw new Error('파이프라인을 찾을 수 없습니다.')
 
-  // Task 페이지네이션
-  ipcMain.handle('task:get-paginated', async (_event, category: 'crawl' | 'action', page: number, pageSize: number) => {
-    if (!taskManager) {
-      return { tasks: [], total: 0, page: 1, pageSize: 20, totalPages: 0 }
-    }
-    return taskManager.getTasksPaginated(category, page, pageSize)
-  })
+    const executionId = randomUUID()
 
-  // Task 검증
-  ipcMain.handle('task:validate-crawl', async (_event, task: unknown) => {
-    if (!taskManager) {
-      return { valid: false, errors: ['저장소가 설정되지 않았습니다.'], warnings: [] }
+    // 실행 기록 저장 (시작)
+    if (pipelineDB) {
+      pipelineDB.saveExecution({
+        id: executionId,
+        pipelineId,
+        initialUrl,
+        status: 'running',
+        startedAt: Date.now()
+      })
     }
-    return taskManager.validateCrawlTask(task as CrawlTask)
-  })
 
-  ipcMain.handle('task:validate-action', async (_event, task: unknown) => {
-    if (!taskManager) {
-      return { valid: false, errors: ['저장소가 설정되지 않았습니다.'], warnings: [] }
+    const engine = new PipelineExecutionEngine({
+      taskManager,
+      filterManager,
+      onProgress: (event) => {
+        window.webContents.send('pipeline:execution-progress', event)
+      }
+    })
+
+    try {
+      const result = await engine.execute(pipeline, initialUrl, executionId)
+
+      // 실행 기록 업데이트
+      if (pipelineDB) {
+        pipelineDB.saveExecution({
+          id: executionId,
+          pipelineId,
+          initialUrl,
+          status: result.status,
+          startedAt: result.startedAt,
+          completedAt: result.completedAt,
+          error: result.error
+        })
+      }
+
+      window.webContents.send('pipeline:execution-complete', result)
+      return result
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+
+      if (pipelineDB) {
+        pipelineDB.saveExecution({
+          id: executionId,
+          pipelineId,
+          initialUrl,
+          status: 'failed',
+          startedAt: Date.now(),
+          completedAt: Date.now(),
+          error: errorMessage
+        })
+      }
+
+      window.webContents.send('pipeline:execution-error', errorMessage)
+      throw error
     }
-    return taskManager.validateActionTask(task as ActionTask)
   })
 }
 
@@ -395,7 +452,7 @@ app.whenReady().then(() => {
   if (savedPath) {
     historyDB.setDatabasePath(savedPath)
 
-    // Pipeline & Task 데이터베이스 초기화
+    // Pipeline & Task & Filter 데이터베이스 초기화
     const db = historyDB.getDatabase()
     if (db) {
       pipelineDB = new PipelineDatabase(db)
@@ -403,6 +460,9 @@ app.whenReady().then(() => {
 
       taskDB = new TaskDatabase(db)
       taskManager = new TaskManager(taskDB)
+
+      filterDB = new FilterDatabase(db)
+      filterManager = new FilterManager(filterDB)
     }
   }
 

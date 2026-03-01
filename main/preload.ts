@@ -58,53 +58,56 @@ contextBridge.exposeInMainWorld('pipeline', {
   getStats: (pipelineId: string) =>
     ipcRenderer.invoke('pipeline:get-stats', pipelineId),
   clone: (pipelineId: string, newName?: string) =>
-    ipcRenderer.invoke('pipeline:clone', pipelineId, newName)
+    ipcRenderer.invoke('pipeline:clone', pipelineId, newName),
+
+  // 실행
+  execute: (pipelineId: string, initialUrl: string) =>
+    ipcRenderer.invoke('pipeline:execute', pipelineId, initialUrl),
+  onExecutionProgress: (callback: (event: unknown) => void) => {
+    ipcRenderer.on('pipeline:execution-progress', (_event, data) => callback(data))
+  },
+  onExecutionComplete: (callback: (result: unknown) => void) => {
+    ipcRenderer.on('pipeline:execution-complete', (_event, result) => callback(result))
+  },
+  onExecutionError: (callback: (error: string) => void) => {
+    ipcRenderer.on('pipeline:execution-error', (_event, error) => callback(error))
+  }
 })
 
 contextBridge.exposeInMainWorld('task', {
-  // CrawlTask
-  createCrawl: (dto: unknown) =>
-    ipcRenderer.invoke('task:create-crawl', dto),
-  updateCrawl: (id: string, updates: unknown) =>
-    ipcRenderer.invoke('task:update-crawl', id, updates),
-
-  // ActionTask
-  createAction: (dto: unknown) =>
-    ipcRenderer.invoke('task:create-action', dto),
-  updateAction: (id: string, updates: unknown) =>
-    ipcRenderer.invoke('task:update-action', id, updates),
-
-  // 조회
+  create: (dto: unknown) =>
+    ipcRenderer.invoke('task:create', dto),
+  update: (id: string, updates: unknown) =>
+    ipcRenderer.invoke('task:update', id, updates),
   get: (id: string) =>
     ipcRenderer.invoke('task:get', id),
   getAll: () =>
     ipcRenderer.invoke('task:get-all'),
-  getCrawl: () =>
-    ipcRenderer.invoke('task:get-crawl'),
-  getAction: () =>
-    ipcRenderer.invoke('task:get-action'),
+  getByCategory: (category: string) =>
+    ipcRenderer.invoke('task:get-by-category', category),
   search: (query: string) =>
     ipcRenderer.invoke('task:search', query),
-
-  // 삭제
   delete: (id: string) =>
     ipcRenderer.invoke('task:delete', id),
   deleteMultiple: (ids: string[]) =>
     ipcRenderer.invoke('task:delete-multiple', ids),
-
-  // 빠른 생성
-  createQuickCrawl: () =>
-    ipcRenderer.invoke('task:create-quick-crawl'),
-  createQuickAction: () =>
-    ipcRenderer.invoke('task:create-quick-action'),
-
-  // 페이지네이션
-  getPaginated: (category: 'crawl' | 'action', page: number, pageSize: number) =>
+  createQuick: (category: string) =>
+    ipcRenderer.invoke('task:create-quick', category),
+  getPaginated: (category: string, page: number, pageSize: number) =>
     ipcRenderer.invoke('task:get-paginated', category, page, pageSize),
+  validate: (task: unknown) =>
+    ipcRenderer.invoke('task:validate', task)
+})
 
-  // 검증
-  validateCrawl: (task: unknown) =>
-    ipcRenderer.invoke('task:validate-crawl', task),
-  validateAction: (task: unknown) =>
-    ipcRenderer.invoke('task:validate-action', task)
+contextBridge.exposeInMainWorld('filter', {
+  create: (dto: unknown) =>
+    ipcRenderer.invoke('filter:create', dto),
+  get: (id: string) =>
+    ipcRenderer.invoke('filter:get', id),
+  getAll: () =>
+    ipcRenderer.invoke('filter:get-all'),
+  update: (id: string, updates: unknown) =>
+    ipcRenderer.invoke('filter:update', id, updates),
+  delete: (id: string) =>
+    ipcRenderer.invoke('filter:delete', id)
 })

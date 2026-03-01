@@ -3,7 +3,7 @@
  */
 
 import Database from 'better-sqlite3'
-import type { Task, CrawlTask, ActionTask, AnyTask } from './types'
+import type { AnyTask, TaskCategory } from './types'
 
 export class TaskDatabase {
   private db: Database.Database
@@ -14,20 +14,28 @@ export class TaskDatabase {
   }
 
   private initialize(): void {
-    // Tasks 테이블
+    // Drop old tables if they have old category constraint
+    // Check if migration is needed by trying to detect old schema
+    const tableInfo = this.db.pragma('table_info(tasks)') as any[]
+    const needsMigration = tableInfo.length > 0 && !this.isNewSchema()
+
+    if (needsMigration) {
+      this.db.exec('DROP TABLE IF EXISTS task_order')
+      this.db.exec('DROP TABLE IF EXISTS tasks')
+    }
+
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS tasks (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
         description TEXT,
-        category TEXT NOT NULL CHECK(category IN ('crawl', 'action')),
+        category TEXT NOT NULL CHECK(category IN ('string_filter', 'page_navigation', 'string_extraction', 'resource_extraction')),
         config TEXT NOT NULL,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       );
     `)
 
-    // Task 정렬 순서 테이블
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS task_order (
         task_id TEXT PRIMARY KEY,
@@ -37,12 +45,27 @@ export class TaskDatabase {
       );
     `)
 
-    // 인덱스
     this.db.exec(`
       CREATE INDEX IF NOT EXISTS idx_tasks_category ON tasks(category);
       CREATE INDEX IF NOT EXISTS idx_tasks_name ON tasks(name);
       CREATE INDEX IF NOT EXISTS idx_task_order_category ON task_order(category, order_index);
     `)
+  }
+
+  private isNewSchema(): boolean {
+    try {
+      this.db.exec("SAVEPOINT schema_check")
+      try {
+        this.db.prepare("INSERT INTO tasks (id, name, category, config, created_at, updated_at) VALUES ('__test__', '__test__', 'string_filter', '{}', 0, 0)").run()
+        this.db.exec("ROLLBACK TO schema_check")
+        return true
+      } catch {
+        this.db.exec("ROLLBACK TO schema_check")
+        return false
+      }
+    } catch {
+      return false
+    }
   }
 
   // Task 저장 (최적화: 신규/업데이트 분리)
@@ -115,7 +138,7 @@ export class TaskDatabase {
   }
 
   // 카테고리별 Task 조회
-  getTasksByCategory(category: 'crawl' | 'action'): AnyTask[] {
+  getTasksByCategory(category: TaskCategory): AnyTask[] {
     const stmt = this.db.prepare(`
       SELECT * FROM tasks
       WHERE category = ?
@@ -160,7 +183,7 @@ export class TaskDatabase {
   }
 
   // 카테고리별 페이지네이션 조회
-  getTasksPaginated(category: 'crawl' | 'action', page: number, pageSize: number): {
+  getTasksPaginated(category: TaskCategory, page: number, pageSize: number): {
     tasks: AnyTask[]
     total: number
     page: number
@@ -201,7 +224,7 @@ export class TaskDatabase {
   }
 
   // Task 이름 존재 여부 확인
-  taskNameExists(name: string, category: 'crawl' | 'action'): boolean {
+  taskNameExists(name: string, category: TaskCategory): boolean {
     const stmt = this.db.prepare(`
       SELECT COUNT(*) as count
       FROM tasks

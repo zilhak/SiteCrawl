@@ -1,3 +1,8 @@
+/**
+ * Renderer 타입 선언
+ */
+
+// Crawl
 export interface CrawlResult {
   url: string
   title: string
@@ -7,19 +12,10 @@ export interface CrawlResult {
   timestamp: number
 }
 
-export interface DomainFilter {
-  mode: 'whitelist' | 'blacklist'
-  patterns: string[]
-}
-
-export interface DomainSettings {
-  [domain: string]: DomainFilter
-}
-
 export interface CrawlOptions {
   includeAbsolutePaths?: boolean
   includeRelativePaths?: boolean
-  domainSettings?: DomainSettings
+  domainSettings?: Record<string, { mode: 'whitelist' | 'blacklist'; patterns: string[] }>
 }
 
 export interface CrawlHistory {
@@ -31,6 +27,34 @@ export interface CrawlHistory {
   timestamp: number
 }
 
+// Filter
+export interface Filter {
+  id: string
+  name: string
+  description?: string
+  mode: 'whitelist' | 'blacklist'
+  regex?: string
+  wildcards?: string[]
+  createdAt: number
+  updatedAt: number
+}
+
+// Task
+export type TaskCategory = 'string_filter' | 'page_navigation' | 'string_extraction' | 'resource_extraction'
+
+export interface Task {
+  id: string
+  name: string
+  description?: string
+  category: TaskCategory
+  config: Record<string, unknown>
+  createdAt: number
+  updatedAt: number
+}
+
+export type AnyTask = Task
+
+// Pipeline
 export interface PipelineTask {
   taskId: string
   name: string
@@ -54,88 +78,48 @@ export interface ValidationResult {
 }
 
 export interface PipelineStats {
-  taskCount: number
-  depth: number
-  branches: number
+  totalTasks: number
+  entryPoints: number
   leafNodes: number
+  maxDepth: number
 }
 
-// Task 타입
-export interface Task {
-  id: string
-  name: string
-  description?: string
-  category: 'crawl' | 'action'
-  createdAt: number
-  updatedAt: number
+// Pipeline Execution
+export interface ExecutionProgressEvent {
+  executionId: string
+  taskName: string
+  taskId: string
+  status: 'running' | 'completed' | 'failed'
+  message: string
+  timestamp: number
 }
 
-export interface CrawlTask extends Task {
-  category: 'crawl'
-  config: {
-    type: 'blacklist' | 'whitelist'
-    patterns: string[]
-    limit: number
-    includeAbsolutePaths: boolean
-    includeRelativePaths: boolean
-  }
+export interface NodeExecutionResult {
+  taskName: string
+  taskId: string
+  success: boolean
+  output: { type: string; value: unknown } | null
+  error?: string
+  startedAt: number
+  completedAt: number
 }
 
-// Action 타입 정의
-export type ActionType = 'store'
-
-// Action별 설정
-export interface StoreActionConfig {
-  type: 'store'
-  path: string  // 저장 경로 (store/ 하위 경로)
+export interface PipelineExecutionResult {
+  executionId: string
+  pipelineId: string
+  status: 'completed' | 'failed' | 'partially_failed'
+  results: NodeExecutionResult[]
+  error?: string
+  startedAt: number
+  completedAt: number
 }
 
-// ActionConfig 유니온 타입
-export type ActionConfig = StoreActionConfig
-
-export interface ActionTask extends Task {
-  category: 'action'
-  config: ActionConfig
-}
-
-export type AnyTask = CrawlTask | ActionTask
-
-export interface CreateCrawlTaskDTO {
-  name: string
-  description?: string
-  type: 'blacklist' | 'whitelist'
-  includeAbsolutePaths?: boolean
-  includeRelativePaths?: boolean
-  patterns: string[]
-  limit: number
-}
-
-export interface CreateActionTaskDTO {
-  name: string
-  description?: string
-  type: ActionType
-  path: string
-}
-
-export interface TaskValidationResult {
-  valid: boolean
-  errors: string[]
-  warnings: string[]
-}
-
-export interface TaskPaginationResult {
-  tasks: AnyTask[]
-  total: number
-  page: number
-  pageSize: number
-  totalPages: number
-}
-
+// Window API declarations
 declare global {
   interface Window {
     crawler: {
-      startCrawl: (url: string, useSession?: boolean, options?: CrawlOptions) => Promise<CrawlResult>
-      onProgress: (callback: (data: unknown) => void) => void
+      startCrawl: (url: string, useSession?: boolean, options?: unknown) => Promise<CrawlResult>
+      onProgress: (callback: (data: { message: string }) => void) => void
       onComplete: (callback: (data: CrawlResult) => void) => void
       onError: (callback: (error: string) => void) => void
     }
@@ -154,35 +138,47 @@ declare global {
     }
     pipeline: {
       create: (name: string, description?: string) => Promise<Pipeline>
-      save: (pipeline: Pipeline) => Promise<{ success: boolean; error?: string }>
+      save: (pipeline: unknown) => Promise<{ success: boolean; error?: string }>
       get: (id: string) => Promise<Pipeline | null>
       getAll: () => Promise<Pipeline[]>
       search: (query: string) => Promise<Pipeline[]>
       delete: (id: string) => Promise<boolean>
-      addTask: (pipelineId: string, task: PipelineTask) => Promise<{ success: boolean; error?: string }>
-      removeTask: (pipelineId: string, taskName: string) => Promise<{ success: boolean; error?: string }>
-      updateTask: (pipelineId: string, taskName: string, updates: Partial<PipelineTask>) => Promise<{ success: boolean; error?: string }>
+      addTask: (pipelineId: string, task: unknown) => Promise<{ success: boolean; error?: string; warnings?: string[] }>
+      removeTask: (pipelineId: string, taskName: string) => Promise<{ success: boolean; error?: string; warnings?: string[] }>
+      updateTask: (pipelineId: string, taskName: string, updates: unknown) => Promise<{ success: boolean; error?: string; warnings?: string[] }>
       validate: (pipelineId: string) => Promise<ValidationResult>
       getStats: (pipelineId: string) => Promise<PipelineStats | null>
       clone: (pipelineId: string, newName?: string) => Promise<Pipeline | null>
+      execute: (pipelineId: string, initialUrl: string) => Promise<PipelineExecutionResult>
+      onExecutionProgress: (callback: (event: ExecutionProgressEvent) => void) => void
+      onExecutionComplete: (callback: (result: PipelineExecutionResult) => void) => void
+      onExecutionError: (callback: (error: string) => void) => void
     }
     task: {
-      createCrawl: (dto: CreateCrawlTaskDTO) => Promise<CrawlTask>
-      updateCrawl: (id: string, updates: Partial<CreateCrawlTaskDTO>) => Promise<{ success: boolean; error?: string }>
-      createAction: (dto: CreateActionTaskDTO) => Promise<ActionTask>
-      updateAction: (id: string, updates: Partial<CreateActionTaskDTO>) => Promise<{ success: boolean; error?: string }>
+      create: (dto: unknown) => Promise<AnyTask>
+      update: (id: string, updates: unknown) => Promise<{ success: boolean; error?: string }>
       get: (id: string) => Promise<AnyTask | null>
       getAll: () => Promise<AnyTask[]>
-      getCrawl: () => Promise<CrawlTask[]>
-      getAction: () => Promise<ActionTask[]>
+      getByCategory: (category: string) => Promise<AnyTask[]>
       search: (query: string) => Promise<AnyTask[]>
       delete: (id: string) => Promise<boolean>
       deleteMultiple: (ids: string[]) => Promise<number>
-      createQuickCrawl: () => Promise<CrawlTask>
-      createQuickAction: () => Promise<ActionTask>
-      getPaginated: (category: 'crawl' | 'action', page: number, pageSize: number) => Promise<TaskPaginationResult>
-      validateCrawl: (task: CrawlTask) => Promise<TaskValidationResult>
-      validateAction: (task: ActionTask) => Promise<TaskValidationResult>
+      createQuick: (category: string) => Promise<AnyTask>
+      getPaginated: (category: string, page: number, pageSize: number) => Promise<{
+        tasks: AnyTask[]
+        total: number
+        page: number
+        pageSize: number
+        totalPages: number
+      }>
+      validate: (task: unknown) => Promise<{ valid: boolean; errors: string[]; warnings: string[] }>
+    }
+    filter: {
+      create: (dto: unknown) => Promise<Filter>
+      get: (id: string) => Promise<Filter | null>
+      getAll: () => Promise<Filter[]>
+      update: (id: string, updates: unknown) => Promise<{ success: boolean; error?: string }>
+      delete: (id: string) => Promise<boolean>
     }
   }
 }

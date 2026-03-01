@@ -14,13 +14,11 @@ import {
 import SettingsIcon from '@mui/icons-material/Settings'
 import BuildIcon from '@mui/icons-material/Build'
 import BugReportIcon from '@mui/icons-material/BugReport'
-import LinkIcon from '@mui/icons-material/Link'
-import WorkIcon from '@mui/icons-material/Work'
+import TaskIcon from '@mui/icons-material/Task'
 import AccountTreeIcon from '@mui/icons-material/AccountTree'
 
 import CrawlingPage from './pages/CrawlingPage'
 import CrawlTaskPage from './pages/CrawlTaskPage'
-import ActionTaskPage from './pages/ActionTaskPage'
 import PipelinePage from './pages/PipelinePage'
 import PipelineEditorPage from './pages/PipelineEditorPage'
 import SettingsPage from './pages/SettingsPage'
@@ -32,7 +30,7 @@ import { theme } from './styles'
 function App() {
   // 모드 상태 (크롤링 vs 파이프라인 설정)
   const [mode, setMode] = useState<'crawling' | 'pipeline-config'>('crawling')
-  const [pipelineConfigTab, setPipelineConfigTab] = useState(0) // 0: URL추출, 1: 작업, 2: 파이프라인
+  const [pipelineConfigTab, setPipelineConfigTab] = useState(0) // 0: 태스크, 1: 파이프라인
 
   // 옵션 및 설정 상태
   const [showSettings, setShowSettings] = useState(false)
@@ -151,16 +149,14 @@ function App() {
                 sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: 'background.paper' }}
                 centered
               >
-                <Tab icon={<LinkIcon />} label="URL추출 태스크" iconPosition="start" />
-                <Tab icon={<WorkIcon />} label="작업 태스크" iconPosition="start" />
+                <Tab icon={<TaskIcon />} label="태스크" iconPosition="start" />
                 <Tab icon={<AccountTreeIcon />} label="파이프라인" iconPosition="start" />
               </Tabs>
 
               {/* 탭 컨텐츠 */}
               <Container maxWidth="lg">
                 {pipelineConfigTab === 0 && <CrawlTaskPage isStorageActive={isStorageActive} />}
-                {pipelineConfigTab === 1 && <ActionTaskPage isStorageActive={isStorageActive} />}
-                {pipelineConfigTab === 2 && (
+                {pipelineConfigTab === 1 && (
                   <PipelinePage
                     isStorageActive={isStorageActive}
                     onEditPipeline={handleEditPipeline}

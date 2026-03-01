@@ -16,7 +16,7 @@ import {
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
 import CloseIcon from '@mui/icons-material/Close'
 import SearchIcon from '@mui/icons-material/Search'
-import type { CrawlResult, CrawlOptions, Pipeline } from '../types'
+import type { CrawlResult, CrawlOptions, Pipeline, PipelineExecutionResult, ExecutionProgressEvent } from '../types'
 import { crawlerService } from '../services/crawlerService'
 import { pipelineService } from '../services/pipelineService'
 
@@ -31,26 +31,42 @@ export default function CrawlingPage({ options, isStorageActive }: CrawlingPageP
   const [progress, setProgress] = useState('')
   const [error, setError] = useState('')
   const [result, setResult] = useState<CrawlResult | null>(null)
+  const [executionResult, setExecutionResult] = useState<PipelineExecutionResult | null>(null)
 
   const [pipelines, setPipelines] = useState<Pipeline[]>([])
   const [selectedPipeline, setSelectedPipeline] = useState<Pipeline | null>(null)
 
   const startCrawl = async () => {
     if (!url || isLoading) return
-    if (!options.includeAbsolutePaths && !options.includeRelativePaths) {
-      setError('최소 하나의 경로 유형을 선택해야 합니다')
-      return
-    }
 
     setIsLoading(true)
-    setProgress('크롤링 시작...')
+    setProgress('시작...')
     setError('')
     setResult(null)
+    setExecutionResult(null)
 
-    try {
-      await crawlerService.startCrawl(url, false, options)
-    } catch (err) {
-      console.error('Crawl error:', err)
+    if (selectedPipeline) {
+      // 파이프라인 실행 모드
+      try {
+        setProgress('파이프라인 실행 중...')
+        await pipelineService.execute(selectedPipeline.id, url)
+        // 결과는 onExecutionComplete 이벤트로 수신
+      } catch (err) {
+        setError(err instanceof Error ? err.message : '파이프라인 실행 실패')
+        setIsLoading(false)
+      }
+    } else {
+      // 기존 단순 크롤링
+      if (!options.includeAbsolutePaths && !options.includeRelativePaths) {
+        setError('최소 하나의 경로 유형을 선택해야 합니다')
+        setIsLoading(false)
+        return
+      }
+      try {
+        await crawlerService.startCrawl(url, false, options)
+      } catch (err) {
+        console.error('Crawl error:', err)
+      }
     }
   }
 
@@ -66,7 +82,8 @@ export default function CrawlingPage({ options, isStorageActive }: CrawlingPageP
 
   useEffect(() => {
     crawlerService.onProgress((data: unknown) => {
-      setProgress(data.message)
+      const d = data as { message: string }
+      setProgress(d.message)
     })
 
     crawlerService.onComplete((data: CrawlResult) => {
@@ -76,6 +93,25 @@ export default function CrawlingPage({ options, isStorageActive }: CrawlingPageP
     })
 
     crawlerService.onError((errorMsg: string) => {
+      setIsLoading(false)
+      setProgress('')
+      setError(errorMsg)
+    })
+
+    // Pipeline execution events
+    pipelineService.onExecutionProgress((event: unknown) => {
+      const e = event as ExecutionProgressEvent
+      setProgress(`[${e.taskName}] ${e.message}`)
+    })
+
+    pipelineService.onExecutionComplete((result: unknown) => {
+      const r = result as PipelineExecutionResult
+      setIsLoading(false)
+      setProgress('')
+      setExecutionResult(r)
+    })
+
+    pipelineService.onExecutionError((errorMsg: string) => {
       setIsLoading(false)
       setProgress('')
       setError(errorMsg)
@@ -182,11 +218,11 @@ export default function CrawlingPage({ options, isStorageActive }: CrawlingPageP
         </Alert>
       )}
 
-      {/* 결과 표시 */}
+      {/* 크롤링 결과 표시 */}
       {result ? (
         <Paper sx={{ p: 3 }}>
           <Typography variant="h5" gutterBottom fontWeight={600}>
-            📊 크롤링 결과
+            크롤링 결과
           </Typography>
 
           <Stack spacing={3}>
@@ -261,14 +297,74 @@ export default function CrawlingPage({ options, isStorageActive }: CrawlingPageP
             </Box>
           </Stack>
         </Paper>
-      ) : !isLoading ? (
+      ) : null}
+
+      {/* 파이프라인 실행 결과 */}
+      {executionResult && (
+        <Paper sx={{ p: 3 }}>
+          <Typography variant="h5" gutterBottom fontWeight={600}>
+            파이프라인 실행 결과
+          </Typography>
+
+          <Alert severity={executionResult.status === 'completed' ? 'success' : executionResult.status === 'failed' ? 'error' : 'warning'} sx={{ mb: 2 }}>
+            상태: {executionResult.status === 'completed' ? '완료' : executionResult.status === 'failed' ? '실패' : '부분 실패'}
+            {executionResult.error && ` - ${executionResult.error}`}
+          </Alert>
+
+          <Stack spacing={2}>
+            {executionResult.results.map((nodeResult, index) => (
+              <Paper key={index} variant="outlined" sx={{ p: 2 }}>
+                <Stack direction="row" justifyContent="space-between" alignItems="center">
+                  <Typography variant="subtitle2" fontWeight={600}>
+                    {nodeResult.taskName}
+                  </Typography>
+                  <Alert severity={nodeResult.success ? 'success' : 'error'} sx={{ py: 0 }}>
+                    {nodeResult.success ? '성공' : '실패'}
+                  </Alert>
+                </Stack>
+                {nodeResult.error && (
+                  <Typography variant="body2" color="error" sx={{ mt: 1 }}>
+                    {nodeResult.error}
+                  </Typography>
+                )}
+                {nodeResult.output && nodeResult.output.type === 'strings' && (
+                  <Box sx={{ mt: 1 }}>
+                    <Typography variant="caption" color="text.secondary">
+                      결과: {(nodeResult.output.value as string[]).length}개 항목
+                    </Typography>
+                    <Paper variant="outlined" sx={{ p: 1, mt: 0.5, maxHeight: 200, overflow: 'auto' }}>
+                      {(nodeResult.output.value as string[]).slice(0, 50).map((item, i) => (
+                        <Typography key={i} variant="body2" sx={{ py: 0.25 }}>
+                          {item}
+                        </Typography>
+                      ))}
+                      {(nodeResult.output.value as string[]).length > 50 && (
+                        <Typography variant="body2" color="text.secondary">
+                          ...외 {(nodeResult.output.value as string[]).length - 50}개
+                        </Typography>
+                      )}
+                    </Paper>
+                  </Box>
+                )}
+              </Paper>
+            ))}
+          </Stack>
+
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+            실행 시간: {new Date(executionResult.startedAt).toLocaleString('ko-KR')} ~ {new Date(executionResult.completedAt).toLocaleString('ko-KR')}
+          </Typography>
+        </Paper>
+      )}
+
+      {/* 플레이스홀더 */}
+      {!result && !executionResult && !isLoading && (
         <Paper sx={{ p: 8, textAlign: 'center' }}>
           <SearchIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
           <Typography variant="h6" color="text.secondary">
             URL을 입력하고 크롤링을 시작하세요
           </Typography>
         </Paper>
-      ) : null}
+      )}
     </Box>
   )
 }

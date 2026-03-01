@@ -39,10 +39,17 @@ import ReactFlow, {
   Position
 } from 'reactflow'
 import 'reactflow/dist/style.css'
-import type { Pipeline, PipelineTask, AnyTask, CrawlTask, ActionTask } from '../types'
+import type { Pipeline, PipelineTask, AnyTask, TaskCategory } from '../types'
 import { pipelineService } from '../services/pipelineService'
 import { taskService } from '../services/taskService'
 import { colors } from '../styles'
+
+const CATEGORY_LABELS: Record<TaskCategory, string> = {
+  string_filter: '문자열 필터',
+  page_navigation: '페이지 이동',
+  string_extraction: '문자열 추출',
+  resource_extraction: '리소스 추출'
+}
 
 // Zod 스키마 정의
 const pipelineInfoSchema = z.object({
@@ -70,7 +77,7 @@ interface TaskNodeData {
   nodeId: string
   taskId?: string
   taskName: string
-  taskCategory?: 'crawl' | 'action'
+  taskCategory?: TaskCategory
   isRoot?: boolean
   onAddChild: (nodeId: string) => void
   onDelete: (nodeId: string) => void
@@ -108,9 +115,9 @@ function TaskNode({ data }: { data: TaskNodeData }) {
           </Typography>
           {data.taskCategory && (
             <Chip
-              label={data.taskCategory}
+              label={CATEGORY_LABELS[data.taskCategory]}
               size="small"
-              color={data.taskCategory === 'crawl' ? 'primary' : 'secondary'}
+              color="primary"
               sx={{
                 height: 18,
                 fontSize: '10px',
@@ -182,6 +189,30 @@ function TaskNode({ data }: { data: TaskNodeData }) {
   )
 }
 
+function getTaskSummary(task: AnyTask): string {
+  const cfg = task.config as Record<string, unknown>
+  if (task.category === 'string_filter') {
+    const limit = typeof cfg.limit === 'number' ? cfg.limit : -1
+    return `limit: ${limit === -1 ? '무제한' : limit}`
+  } else if (task.category === 'page_navigation') {
+    const waitUntil = cfg.waitUntil ?? 'domcontentloaded'
+    const timeout = cfg.timeout ?? 30000
+    return `${waitUntil} / ${timeout}ms`
+  } else if (task.category === 'string_extraction') {
+    const count = [
+      cfg.includeHrefLinks,
+      cfg.includeTextUrls,
+      cfg.includeAbsolutePaths,
+      cfg.includeRelativePaths
+    ].filter(Boolean).length
+    return `${count}개 옵션 활성`
+  } else if (task.category === 'resource_extraction') {
+    const rt = Array.isArray(cfg.resourceTypes) ? cfg.resourceTypes : []
+    return `${rt.length}개 리소스 타입`
+  }
+  return ''
+}
+
 export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEditorPageProps) {
   const [pipeline, setPipeline] = useState<Pipeline | null>(null)
 
@@ -218,19 +249,19 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
 
   // Task selector filters
   const [searchQuery, setSearchQuery] = useState('')
-  const [categoryFilter, setCategoryFilter] = useState<'all' | 'crawl' | 'action'>('all')
+  const [categoryFilter, setCategoryFilter] = useState<'all' | TaskCategory>('all')
 
   // Pipeline item naming
   const [selectedTask, setSelectedTask] = useState<AnyTask | null>(null)
   const [showNameDialog, setShowNameDialog] = useState(false)
 
   useEffect(() => {
-    loadTasks()
+    void loadTasks()
   }, [])
 
   useEffect(() => {
     if (pipelineId) {
-      loadPipeline()
+      void loadPipeline()
     } else {
       initializeNodes()
     }
@@ -257,7 +288,7 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
     }
   }
 
-  const loadNodesFromPipeline = (pipeline: Pipeline) => {
+  const loadNodesFromPipeline = (pipelineData: Pipeline) => {
     // Create root node
     const rootNode: Node = {
       id: 'root',
@@ -277,15 +308,9 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
     const nodeMap = new Map<string, Node>()
     nodeMap.set('_run_', rootNode)
 
-    // Build task name to task map
-    const taskMap = new Map<string, PipelineTask>()
-    pipeline.tasks.forEach(task => {
-      taskMap.set(task.name, task)
-    })
-
     // Calculate layout: group tasks by their trigger (parent)
     const childrenByParent = new Map<string, PipelineTask[]>()
-    pipeline.tasks.forEach(task => {
+    pipelineData.tasks.forEach(task => {
       const parent = task.trigger
       if (!childrenByParent.has(parent)) {
         childrenByParent.set(parent, [])
@@ -294,12 +319,13 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
     })
 
     // Recursive function to layout nodes
-    let nodeCounter = 0
+    let counter = 0
     const layoutNode = (parentName: string, parentNode: Node, depth: number) => {
       const children = childrenByParent.get(parentName) || []
 
       children.forEach((child, index) => {
-        const nodeId = `node-${nodeCounter++}`
+        const nodeId = `node-${counter++}`
+        const foundTask = availableTasks.find(t => t.id === child.taskId)
         const childNode: Node = {
           id: nodeId,
           type: 'taskNode',
@@ -311,7 +337,7 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
             nodeId: nodeId,
             taskId: child.taskId,
             taskName: child.name,
-            taskCategory: child.taskId ? (availableTasks.find(t => t.id === child.taskId)?.category) : undefined,
+            taskCategory: foundTask?.category,
             onAddChild: handleAddChild,
             onDelete: handleDeleteNode
           }
@@ -342,12 +368,12 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
 
     setNodes(newNodes)
     setEdges(newEdges)
-    setNodeCounter(nodeCounter)
+    setNodeCounter(counter)
   }
 
   const loadTasks = async () => {
     try {
-      const tasks = await taskService.getAllTasks()
+      const tasks = await taskService.getAll()
       setAvailableTasks(tasks)
     } catch (err) {
       console.error('Task 로드 실패:', err)
@@ -378,7 +404,6 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
   }, [])
 
   const handleDeleteNode = useCallback((nodeId: string) => {
-    // 자식 노드들도 함께 삭제
     const findDescendants = (id: string): string[] => {
       const children = edges.filter(e => e.source === id).map(e => e.target)
       return [id, ...children.flatMap(findDescendants)]
@@ -390,7 +415,6 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
   }, [edges])
 
   const handleSelectTask = (task: AnyTask) => {
-    // Generate unique default name
     const existingNames = nodes.map(n => n.data.taskName)
     let defaultName = task.name
     let counter = 1
@@ -400,7 +424,6 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
       defaultName = `${task.name}_${counter}`
     }
 
-    // Open name dialog
     setSelectedTask(task)
     setValueItem('name', defaultName)
     setShowNameDialog(true)
@@ -432,15 +455,11 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
     const newNodeId = `node-${nodeCounter}`
     setNodeCounter(prev => prev + 1)
 
-    // 부모 노드 찾기
     const parentNode = nodes.find(n => n.id === selectingParentId)
     if (!parentNode) return
 
-    // 부모의 자식 개수 세기
     const childCount = edges.filter(e => e.source === selectingParentId).length
 
-    // 새 노드 위치 계산 (부모 아래, 옆으로 배치)
-    // 첫 번째 자식은 부모 바로 아래(offset 0), 이후는 오른쪽으로 200px씩
     const newNode: Node = {
       id: newNodeId,
       type: 'taskNode',
@@ -458,7 +477,6 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
       }
     }
 
-    // 새 엣지
     const newEdge: Edge = {
       id: `edge-${selectingParentId}-${newNodeId}`,
       source: selectingParentId,
@@ -478,42 +496,32 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
     resetItem()
   }
 
-  // Filter tasks based on search and filters
-  // Filtered tasks based on search and category
   const filteredTasks = useMemo(() => {
     return availableTasks.filter(task => {
-      // Search filter
       if (searchQuery && !task.name.toLowerCase().includes(searchQuery.toLowerCase())) {
         return false
       }
-
-      // Category filter
       if (categoryFilter !== 'all' && task.category !== categoryFilter) {
         return false
       }
-
       return true
     })
   }, [availableTasks, searchQuery, categoryFilter])
 
   const handleSave = async () => {
-    // 검증
     if (!pipelineName || !pipelineName.trim()) {
       alert('파이프라인 이름을 입력해주세요.')
       return
     }
 
     try {
-      // Convert nodes/edges to PipelineTask[]
       const tasks: PipelineTask[] = []
 
-      // Build a map of node id to node data
       const nodeById = new Map<string, Node>()
       nodes.forEach(node => {
         nodeById.set(node.id, node)
       })
 
-      // For each edge, create a PipelineTask
       edges.forEach(edge => {
         const sourceNode = nodeById.get(edge.source)
         const targetNode = nodeById.get(edge.target)
@@ -523,7 +531,6 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
         const sourceData = sourceNode.data as TaskNodeData
         const targetData = targetNode.data as TaskNodeData
 
-        // Skip if target doesn't have a taskId (shouldn't happen)
         if (!targetData.taskId) return
 
         tasks.push({
@@ -533,9 +540,7 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
         })
       })
 
-      // Create or update pipeline
       if (pipelineId) {
-        // Update existing pipeline
         const updatedPipeline: Pipeline = {
           ...pipeline!,
           name: pipelineName,
@@ -550,10 +555,8 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
           alert(`저장 실패: ${result.error}`)
         }
       } else {
-        // Create new pipeline
         const newPipeline = await pipelineService.create(pipelineName, pipelineDesc)
         if (newPipeline) {
-          // Update tasks
           const updatedPipeline: Pipeline = {
             ...newPipeline,
             tasks
@@ -681,20 +684,16 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
                 onClick={() => setCategoryFilter('all')}
                 sx={{ cursor: 'pointer' }}
               />
-              <Chip
-                label="URL추출"
-                size="small"
-                color={categoryFilter === 'crawl' ? 'primary' : 'default'}
-                onClick={() => setCategoryFilter('crawl')}
-                sx={{ cursor: 'pointer' }}
-              />
-              <Chip
-                label="작업"
-                size="small"
-                color={categoryFilter === 'action' ? 'primary' : 'default'}
-                onClick={() => setCategoryFilter('action')}
-                sx={{ cursor: 'pointer' }}
-              />
+              {(Object.keys(CATEGORY_LABELS) as TaskCategory[]).map(cat => (
+                <Chip
+                  key={cat}
+                  label={CATEGORY_LABELS[cat]}
+                  size="small"
+                  color={categoryFilter === cat ? 'primary' : 'default'}
+                  onClick={() => setCategoryFilter(cat)}
+                  sx={{ cursor: 'pointer' }}
+                />
+              ))}
             </Stack>
           </Box>
 
@@ -716,10 +715,7 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
                 {filteredTasks.map((task) => (
                   <ListItem key={task.id} disablePadding sx={{ mb: 1 }}>
                     <ListItemButton
-                      onClick={() => {
-                        setSelectedTask(task)
-                        setShowNameDialog(true)
-                      }}
+                      onClick={() => handleSelectTask(task)}
                       sx={{
                         borderRadius: 1,
                         border: 1,
@@ -737,23 +733,17 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
                               {task.name}
                             </Typography>
                             <Chip
-                              label={task.category === 'crawl' ? 'URL추출' : '작업'}
+                              label={CATEGORY_LABELS[task.category]}
                               size="small"
-                              color={task.category === 'crawl' ? 'primary' : 'secondary'}
+                              color="primary"
+                              variant="outlined"
                             />
                           </Stack>
                         }
                         secondary={
-                          task.category === 'crawl' ? (
-                            <Typography variant="caption" color="text.secondary">
-                              {(task as CrawlTask).config.type === 'whitelist' ? '화이트리스트' : '블랙리스트'} •
-                              {' '}{(task as CrawlTask).config.patterns.length}개 패턴
-                            </Typography>
-                          ) : (
-                            <Typography variant="caption" color="text.secondary">
-                              {(task as ActionTask).actions.length}개 액션
-                            </Typography>
-                          )
+                          <Typography variant="caption" color="text.secondary">
+                            {getTaskSummary(task)}
+                          </Typography>
                         }
                       />
                     </ListItemButton>
@@ -787,18 +777,11 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
                         {selectedTask.name}
                       </Typography>
                       <Chip
-                        label={selectedTask.category === 'crawl' ? 'URL추출' : '작업'}
+                        label={CATEGORY_LABELS[selectedTask.category]}
                         size="small"
-                        color={selectedTask.category === 'crawl' ? 'primary' : 'secondary'}
+                        color="primary"
+                        variant="outlined"
                       />
-                      {selectedTask.category === 'crawl' && (
-                        <Chip
-                          label={(selectedTask as CrawlTask).config.type === 'whitelist' ? '화이트리스트' : '블랙리스트'}
-                          size="small"
-                          color={(selectedTask as CrawlTask).config.type === 'whitelist' ? 'success' : 'error'}
-                          variant="outlined"
-                        />
-                      )}
                     </Stack>
                   </Box>
                 </Box>

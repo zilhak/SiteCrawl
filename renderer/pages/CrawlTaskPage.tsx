@@ -23,88 +23,138 @@ import {
   DialogContent,
   DialogActions,
   TextField,
-  RadioGroup,
-  FormControlLabel,
-  Radio,
   IconButton,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemSecondaryAction
+  FormControlLabel,
+  Switch,
+  MenuItem,
+  Select,
+  FormControl,
+  InputLabel
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import DeleteIcon from '@mui/icons-material/Delete'
 import EditIcon from '@mui/icons-material/Edit'
 import CloseIcon from '@mui/icons-material/Close'
-import type { CrawlTask } from '../types'
+import type { Task, TaskCategory } from '../types'
 import { taskService } from '../services/taskService'
 
-// Zod 스키마 정의
-const crawlTaskSchema = z.object({
-  name: z.string()
-    .min(1, '이름을 입력해주세요')
-    .max(100, '이름은 100자 이하여야 합니다'),
-  type: z.enum(['blacklist', 'whitelist']),
-  limit: z.number().int(),
-  patterns: z.array(z.string()),
+const CATEGORY_LABELS: Record<TaskCategory, string> = {
+  string_filter: '문자열 필터',
+  page_navigation: '페이지 이동',
+  string_extraction: '문자열 추출',
+  resource_extraction: '리소스 추출'
+}
+
+const ALL_CATEGORIES: TaskCategory[] = [
+  'string_filter',
+  'page_navigation',
+  'string_extraction',
+  'resource_extraction'
+]
+
+// --- Zod 스키마 ---
+const baseSchema = z.object({
+  name: z.string().min(1, '이름을 입력해주세요').max(100, '이름은 100자 이하여야 합니다')
+})
+
+const stringFilterSchema = baseSchema.extend({
+  limit: z.number().int().min(-1)
+})
+
+const pageNavigationSchema = baseSchema.extend({
+  waitUntil: z.enum(['domcontentloaded', 'load', 'networkidle']),
+  timeout: z.number().int().min(0),
+  handleCookies: z.boolean()
+})
+
+const stringExtractionSchema = baseSchema.extend({
+  includeHrefLinks: z.boolean(),
+  includeTextUrls: z.boolean(),
   includeAbsolutePaths: z.boolean(),
   includeRelativePaths: z.boolean()
-}).refine(
-  data => data.includeAbsolutePaths || data.includeRelativePaths,
-  {
-    message: '최소 하나의 경로 타입을 선택해야 합니다',
-    path: ['includeRelativePaths']
-  }
-)
+})
 
-type CrawlTaskFormData = z.infer<typeof crawlTaskSchema>
+const resourceExtractionSchema = baseSchema.extend({
+  resourceTypes: z.array(z.enum(['image', 'pdf', 'video', 'css', 'js']))
+})
 
-interface CrawlTaskPageProps {
+// 편집 폼 데이터 타입 (모든 필드의 합집합)
+type EditFormData = {
+  name: string
+  // string_filter
+  limit?: number
+  // page_navigation
+  waitUntil?: 'domcontentloaded' | 'load' | 'networkidle'
+  timeout?: number
+  handleCookies?: boolean
+  // string_extraction
+  includeHrefLinks?: boolean
+  includeTextUrls?: boolean
+  includeAbsolutePaths?: boolean
+  includeRelativePaths?: boolean
+  // resource_extraction
+  resourceTypes?: ('image' | 'pdf' | 'video' | 'css' | 'js')[]
+}
+
+interface TaskManagementPageProps {
   isStorageActive: boolean
 }
 
-export default function CrawlTaskPage({ isStorageActive }: CrawlTaskPageProps) {
-  const [tasks, setTasks] = useState<CrawlTask[]>([])
+export default function TaskManagementPage({ isStorageActive }: TaskManagementPageProps) {
+  const [tasks, setTasks] = useState<Task[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(0)
   const [rowsPerPage] = useState(20)
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [categoryFilter, setCategoryFilter] = useState<'all' | TaskCategory>('all')
 
   // 편집 모달 상태
-  const [editingTask, setEditingTask] = useState<CrawlTask | null>(null)
-  const [newPattern, setNewPattern] = useState('')
+  const [editingTask, setEditingTask] = useState<Task | null>(null)
+  const [resourceTypesState, setResourceTypesState] = useState<string[]>([])
 
   // React Hook Form
-  const { register, control, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm<CrawlTaskFormData>({
-    resolver: zodResolver(crawlTaskSchema),
+  const { register, control, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm<EditFormData>({
     defaultValues: {
       name: '',
-      type: 'blacklist',
       limit: -1,
-      patterns: [],
+      waitUntil: 'domcontentloaded',
+      timeout: 30000,
+      handleCookies: false,
+      includeHrefLinks: true,
+      includeTextUrls: false,
       includeAbsolutePaths: true,
-      includeRelativePaths: true
+      includeRelativePaths: true,
+      resourceTypes: []
     }
   })
 
-  const patterns = watch('patterns')
-
-  const loadTasks = useCallback(async (pageNum: number = 0) => {
+  const loadTasks = useCallback(async (pageNum: number = 0, filter: 'all' | TaskCategory = 'all') => {
     try {
-      const result = await taskService.getTasksPaginated('crawl', pageNum + 1, rowsPerPage)
-      setTasks(result.tasks as CrawlTask[])
-      setTotal(result.total)
+      if (filter === 'all') {
+        const allTasks = await taskService.getAll()
+        const start = pageNum * rowsPerPage
+        const sliced = allTasks.slice(start, start + rowsPerPage)
+        setTasks(sliced)
+        setTotal(allTasks.length)
+      } else {
+        const result = await taskService.getPaginated(filter, pageNum + 1, rowsPerPage)
+        setTasks(result.tasks)
+        setTotal(result.total)
+      }
     } catch (err) {
-      console.error('CrawlTask 로드 실패:', err)
+      console.error('Task 로드 실패:', err)
     }
   }, [rowsPerPage])
 
   const handleAddTask = async () => {
+    // 카테고리 필터가 'all'이면 첫 번째 카테고리로 생성
+    const category: TaskCategory = categoryFilter === 'all' ? 'string_filter' : categoryFilter
     try {
-      await taskService.createQuickCrawl()
-      await loadTasks(page)
+      await taskService.createQuick(category)
+      await loadTasks(page, categoryFilter)
     } catch (err: unknown) {
-      alert(`Task 생성 실패: ${err.message}`)
+      const msg = err instanceof Error ? err.message : '알 수 없는 오류'
+      alert(`Task 생성 실패: ${msg}`)
     }
   }
 
@@ -113,17 +163,17 @@ export default function CrawlTaskPage({ isStorageActive }: CrawlTaskPageProps) {
       alert('삭제할 항목을 선택해주세요.')
       return
     }
-
     if (!confirm(`${selected.size}개의 Task를 삭제하시겠습니까?`)) return
 
     try {
       const ids = Array.from(selected)
-      const deleted = await taskService.deleteMultipleTasks(ids)
+      const deleted = await taskService.deleteMultiple(ids)
       alert(`${deleted}개의 Task가 삭제되었습니다.`)
       setSelected(new Set())
-      await loadTasks(page)
+      await loadTasks(page, categoryFilter)
     } catch (err: unknown) {
-      alert(`Task 삭제 실패: ${err.message}`)
+      const msg = err instanceof Error ? err.message : '알 수 없는 오류'
+      alert(`Task 삭제 실패: ${msg}`)
     }
   }
 
@@ -147,88 +197,158 @@ export default function CrawlTaskPage({ isStorageActive }: CrawlTaskPageProps) {
 
   const handleChangePage = (_event: unknown, newPage: number) => {
     setPage(newPage)
-    loadTasks(newPage)
+    void loadTasks(newPage, categoryFilter)
   }
 
-  const handleOpenEdit = (task: CrawlTask) => {
+  const handleCategoryFilterChange = (filter: 'all' | TaskCategory) => {
+    setCategoryFilter(filter)
+    setPage(0)
+    setSelected(new Set())
+    void loadTasks(0, filter)
+  }
+
+  const buildDefaultValues = (task: Task): EditFormData => {
+    const cfg = task.config as Record<string, unknown>
+    const base: EditFormData = { name: task.name }
+
+    if (task.category === 'string_filter') {
+      base.limit = typeof cfg.limit === 'number' ? cfg.limit : -1
+    } else if (task.category === 'page_navigation') {
+      base.waitUntil = (cfg.waitUntil as 'domcontentloaded' | 'load' | 'networkidle') ?? 'domcontentloaded'
+      base.timeout = typeof cfg.timeout === 'number' ? cfg.timeout : 30000
+      base.handleCookies = typeof cfg.handleCookies === 'boolean' ? cfg.handleCookies : false
+    } else if (task.category === 'string_extraction') {
+      base.includeHrefLinks = typeof cfg.includeHrefLinks === 'boolean' ? cfg.includeHrefLinks : true
+      base.includeTextUrls = typeof cfg.includeTextUrls === 'boolean' ? cfg.includeTextUrls : false
+      base.includeAbsolutePaths = typeof cfg.includeAbsolutePaths === 'boolean' ? cfg.includeAbsolutePaths : true
+      base.includeRelativePaths = typeof cfg.includeRelativePaths === 'boolean' ? cfg.includeRelativePaths : true
+    } else if (task.category === 'resource_extraction') {
+      const rt = Array.isArray(cfg.resourceTypes) ? (cfg.resourceTypes as string[]) : []
+      base.resourceTypes = rt as ('image' | 'pdf' | 'video' | 'css' | 'js')[]
+      setResourceTypesState(rt)
+    }
+
+    return base
+  }
+
+  const handleOpenEdit = (task: Task) => {
     setEditingTask(task)
-    reset({
-      name: task.name,
-      type: task.config.type,
-      limit: task.config.limit,
-      patterns: [...task.config.patterns],
-      includeAbsolutePaths: task.config.includeAbsolutePaths ?? true,
-      includeRelativePaths: task.config.includeRelativePaths ?? true
-    })
-    setNewPattern('')
+    const defaults = buildDefaultValues(task)
+    reset(defaults)
   }
 
   const handleCloseEdit = () => {
     setEditingTask(null)
     reset()
+    setResourceTypesState([])
   }
 
-  const onSubmit = async (data: CrawlTaskFormData) => {
+  const onSubmit = async (data: EditFormData) => {
     if (!editingTask) return
 
-    // 낙관적 업데이트: UI 즉시 반영
-    const updatedTask: CrawlTask = {
-      ...editingTask,
-      name: data.name,
-      config: {
-        type: data.type,
-        patterns: data.patterns,
-        limit: data.limit,
+    let configUpdate: Record<string, unknown> = {}
+
+    if (editingTask.category === 'string_filter') {
+      // validate
+      const parsed = stringFilterSchema.safeParse(data)
+      if (!parsed.success) {
+        alert(parsed.error.issues[0].message)
+        return
+      }
+      configUpdate = { limit: data.limit ?? -1 }
+    } else if (editingTask.category === 'page_navigation') {
+      const parsed = pageNavigationSchema.safeParse(data)
+      if (!parsed.success) {
+        alert(parsed.error.issues[0].message)
+        return
+      }
+      configUpdate = {
+        waitUntil: data.waitUntil,
+        timeout: data.timeout,
+        handleCookies: data.handleCookies
+      }
+    } else if (editingTask.category === 'string_extraction') {
+      const parsed = stringExtractionSchema.safeParse(data)
+      if (!parsed.success) {
+        alert(parsed.error.issues[0].message)
+        return
+      }
+      configUpdate = {
+        includeHrefLinks: data.includeHrefLinks,
+        includeTextUrls: data.includeTextUrls,
         includeAbsolutePaths: data.includeAbsolutePaths,
         includeRelativePaths: data.includeRelativePaths
-      },
-      updatedAt: Date.now()
+      }
+    } else if (editingTask.category === 'resource_extraction') {
+      const parsed = resourceExtractionSchema.safeParse({ ...data, resourceTypes: resourceTypesState })
+      if (!parsed.success) {
+        alert(parsed.error.issues[0].message)
+        return
+      }
+      configUpdate = { resourceTypes: resourceTypesState }
     }
 
-    // UI 즉시 업데이트
+    // 낙관적 업데이트
+    const updatedTask: Task = {
+      ...editingTask,
+      name: data.name,
+      config: { ...editingTask.config, ...configUpdate },
+      updatedAt: Date.now()
+    }
     setTasks(prev => prev.map(t => t.id === editingTask.id ? updatedTask : t))
     handleCloseEdit()
 
-    // 백그라운드에서 DB 저장
     try {
-      await taskService.updateCrawl(editingTask.id, {
+      await taskService.update(editingTask.id, {
         name: data.name,
-        type: data.type,
-        patterns: data.patterns,
-        limit: data.limit,
-        includeAbsolutePaths: data.includeAbsolutePaths,
-        includeRelativePaths: data.includeRelativePaths
+        config: configUpdate
       })
     } catch (err: unknown) {
-      alert(`Task 수정 실패: ${err instanceof Error ? err.message : '알 수 없는 오류'}`)
-      // 실패 시 데이터 다시 로드하여 롤백
-      await loadTasks(page)
+      const msg = err instanceof Error ? err.message : '알 수 없는 오류'
+      alert(`Task 수정 실패: ${msg}`)
+      await loadTasks(page, categoryFilter)
     }
   }
 
-  const handleAddPattern = () => {
-    if (!newPattern.trim()) return
-    if (patterns.includes(newPattern.trim())) {
-      alert('이미 존재하는 패턴입니다')
-      return
-    }
-    setValue('patterns', [...patterns, newPattern.trim()])
-    setNewPattern('')
-  }
-
-  const handleDeletePattern = (pattern: string) => {
-    setValue('patterns', patterns.filter(p => p !== pattern))
+  const toggleResourceType = (type: string) => {
+    setResourceTypesState(prev =>
+      prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
+    )
   }
 
   const formatTimestamp = (timestamp: number) => {
     return new Date(timestamp).toLocaleString('ko-KR')
   }
 
+  const getConfigSummary = (task: Task): string => {
+    const cfg = task.config as Record<string, unknown>
+    if (task.category === 'string_filter') {
+      const limit = typeof cfg.limit === 'number' ? cfg.limit : -1
+      return `limit: ${limit === -1 ? '무제한' : limit}`
+    } else if (task.category === 'page_navigation') {
+      const waitUntil = cfg.waitUntil ?? 'domcontentloaded'
+      const timeout = cfg.timeout ?? 30000
+      return `${waitUntil} / ${timeout}ms`
+    } else if (task.category === 'string_extraction') {
+      const count = [
+        cfg.includeHrefLinks,
+        cfg.includeTextUrls,
+        cfg.includeAbsolutePaths,
+        cfg.includeRelativePaths
+      ].filter(Boolean).length
+      return `${count}개 옵션 활성`
+    } else if (task.category === 'resource_extraction') {
+      const rt = Array.isArray(cfg.resourceTypes) ? cfg.resourceTypes : []
+      return `${rt.length}개 리소스 타입`
+    }
+    return ''
+  }
+
   useEffect(() => {
     if (isStorageActive) {
-      void loadTasks(0)
+      void loadTasks(0, categoryFilter)
     }
-  }, [isStorageActive, loadTasks])
+  }, [isStorageActive, loadTasks])  // categoryFilter는 loadTasks 호출에 별도 인자로 넘김
 
   if (!isStorageActive) {
     return (
@@ -246,10 +366,10 @@ export default function CrawlTaskPage({ isStorageActive }: CrawlTaskPageProps) {
       <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 3 }}>
         <Box>
           <Typography variant="h5" fontWeight={600} gutterBottom>
-            URL추출 태스크
+            태스크 관리
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            URL을 필터링하여 다음 작업으로 전달하는 태스크를 관리합니다.
+            문자열 필터, 페이지 이동, 문자열 추출, 리소스 추출 태스크를 통합 관리합니다.
           </Typography>
         </Box>
         <Stack direction="row" spacing={1}>
@@ -272,11 +392,30 @@ export default function CrawlTaskPage({ isStorageActive }: CrawlTaskPageProps) {
         </Stack>
       </Stack>
 
+      {/* 카테고리 필터 */}
+      <Stack direction="row" spacing={1} sx={{ mb: 2 }} flexWrap="wrap">
+        <Chip
+          label="전체"
+          color={categoryFilter === 'all' ? 'primary' : 'default'}
+          onClick={() => handleCategoryFilterChange('all')}
+          sx={{ cursor: 'pointer' }}
+        />
+        {ALL_CATEGORIES.map(cat => (
+          <Chip
+            key={cat}
+            label={CATEGORY_LABELS[cat]}
+            color={categoryFilter === cat ? 'primary' : 'default'}
+            onClick={() => handleCategoryFilterChange(cat)}
+            sx={{ cursor: 'pointer' }}
+          />
+        ))}
+      </Stack>
+
       {/* 테이블 */}
       {tasks.length === 0 ? (
         <Paper sx={{ p: 4, textAlign: 'center' }}>
           <Typography variant="h6" gutterBottom>
-            등록된 URL추출 태스크가 없습니다
+            등록된 태스크가 없습니다
           </Typography>
           <Typography variant="body2" color="text.secondary">
             + 추가 버튼을 눌러 새 태스크를 생성하세요.
@@ -296,20 +435,15 @@ export default function CrawlTaskPage({ isStorageActive }: CrawlTaskPageProps) {
                     />
                   </TableCell>
                   <TableCell>이름</TableCell>
-                  <TableCell>타입</TableCell>
-                  <TableCell>패턴 개수</TableCell>
-                  <TableCell>Limit</TableCell>
+                  <TableCell>카테고리</TableCell>
+                  <TableCell>설명</TableCell>
                   <TableCell>생성일</TableCell>
                   <TableCell align="center">편집</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {tasks.map((task) => (
-                  <TableRow
-                    key={task.id}
-                    selected={selected.has(task.id)}
-                    hover
-                  >
+                  <TableRow key={task.id} selected={selected.has(task.id)} hover>
                     <TableCell padding="checkbox">
                       <Checkbox
                         checked={selected.has(task.id)}
@@ -323,19 +457,15 @@ export default function CrawlTaskPage({ isStorageActive }: CrawlTaskPageProps) {
                     </TableCell>
                     <TableCell>
                       <Chip
-                        label={task.config.type}
+                        label={CATEGORY_LABELS[task.category]}
                         size="small"
-                        color={task.config.type === 'whitelist' ? 'success' : 'error'}
+                        color="primary"
+                        variant="outlined"
                       />
                     </TableCell>
                     <TableCell>
                       <Typography variant="body2" color="text.secondary">
-                        {task.config.patterns.length}개
-                      </Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="body2" color="text.secondary">
-                        {task.config.limit === -1 ? '무제한' : task.config.limit}
+                        {task.description || getConfigSummary(task)}
                       </Typography>
                     </TableCell>
                     <TableCell>
@@ -389,123 +519,140 @@ export default function CrawlTaskPage({ isStorageActive }: CrawlTaskPageProps) {
               <TextField
                 fullWidth
                 label="이름"
-                {...register('name')}
+                {...register('name', { required: '이름을 입력해주세요' })}
                 error={!!errors.name}
                 helperText={errors.name?.message}
               />
 
-              {/* 타입 */}
-              <Box>
-                <Typography variant="subtitle2" gutterBottom>
-                  필터 모드
-                </Typography>
-                <Controller
-                  name="type"
-                  control={control}
-                  render={({ field }) => (
-                    <RadioGroup {...field}>
-                      <FormControlLabel
-                        value="blacklist"
-                        control={<Radio />}
-                        label="블랙리스트 (패턴에 해당하는 링크 제외)"
-                      />
-                      <FormControlLabel
-                        value="whitelist"
-                        control={<Radio />}
-                        label="화이트리스트 (패턴에 해당하는 링크만 포함)"
-                      />
-                    </RadioGroup>
-                  )}
-                />
-              </Box>
-
-              {/* Limit */}
-              <TextField
-                fullWidth
-                label="Limit (-1 = 무제한)"
-                type="number"
-                {...register('limit', { valueAsNumber: true })}
-                error={!!errors.limit}
-                helperText={errors.limit?.message}
-              />
-
-              {/* 경로 포함 옵션 */}
-              <Box>
-                <Typography variant="subtitle2" gutterBottom>
-                  URL 경로 타입
-                </Typography>
-                <Controller
-                  name="includeAbsolutePaths"
-                  control={control}
-                  render={({ field }) => (
-                    <FormControlLabel
-                      control={<Checkbox {...field} checked={field.value} />}
-                      label="절대경로 포함 (http://..., https://...)"
+              {/* 카테고리 표시 */}
+              {editingTask && (
+                <Box>
+                  <Typography variant="caption" color="text.secondary">카테고리</Typography>
+                  <Box sx={{ mt: 0.5 }}>
+                    <Chip
+                      label={CATEGORY_LABELS[editingTask.category]}
+                      color="primary"
+                      variant="outlined"
                     />
-                  )}
-                />
-                <Controller
-                  name="includeRelativePaths"
-                  control={control}
-                  render={({ field }) => (
-                    <FormControlLabel
-                      control={<Checkbox {...field} checked={field.value} />}
-                      label="상대경로 포함 (/page, ../image.png 등)"
-                    />
-                  )}
-                />
-                {errors.includeRelativePaths && (
-                  <Alert severity="error" sx={{ mt: 1 }}>
-                    {errors.includeRelativePaths.message}
-                  </Alert>
-                )}
-              </Box>
+                  </Box>
+                </Box>
+              )}
 
-              {/* 패턴 목록 */}
-              <Box>
-                <Typography variant="subtitle2" gutterBottom>
-                  URL 패턴
-                </Typography>
-                <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
+              {/* string_filter 전용 필드 */}
+              {editingTask?.category === 'string_filter' && (
+                <TextField
+                  fullWidth
+                  label="Limit (-1 = 무제한)"
+                  type="number"
+                  {...register('limit', { valueAsNumber: true })}
+                  error={!!errors.limit}
+                  helperText={errors.limit?.message}
+                />
+              )}
+
+              {/* page_navigation 전용 필드 */}
+              {editingTask?.category === 'page_navigation' && (
+                <>
+                  <FormControl fullWidth>
+                    <InputLabel>waitUntil</InputLabel>
+                    <Controller
+                      name="waitUntil"
+                      control={control}
+                      render={({ field }) => (
+                        <Select {...field} label="waitUntil">
+                          <MenuItem value="domcontentloaded">domcontentloaded</MenuItem>
+                          <MenuItem value="load">load</MenuItem>
+                          <MenuItem value="networkidle">networkidle</MenuItem>
+                        </Select>
+                      )}
+                    />
+                  </FormControl>
                   <TextField
                     fullWidth
-                    size="small"
-                    placeholder="예: */products/*, */category/*"
-                    value={newPattern}
-                    onChange={(e) => setNewPattern(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && handleAddPattern()}
+                    label="Timeout (ms)"
+                    type="number"
+                    {...register('timeout', { valueAsNumber: true })}
+                    error={!!errors.timeout}
+                    helperText={errors.timeout?.message}
                   />
-                  <Button variant="outlined" onClick={handleAddPattern}>
-                    추가
-                  </Button>
-                </Stack>
+                  <Controller
+                    name="handleCookies"
+                    control={control}
+                    render={({ field }) => (
+                      <FormControlLabel
+                        control={<Switch {...field} checked={field.value ?? false} />}
+                        label="쿠키 처리"
+                      />
+                    )}
+                  />
+                </>
+              )}
 
-                {patterns.length === 0 ? (
-                  <Paper variant="outlined" sx={{ p: 2, textAlign: 'center' }}>
-                    <Typography variant="body2" color="text.secondary">
-                      패턴이 없습니다. 패턴을 추가하세요.
-                    </Typography>
-                  </Paper>
-                ) : (
-                  <Paper variant="outlined" sx={{ maxHeight: 200, overflow: 'auto' }}>
-                    <List dense>
-                      {patterns.map((pattern, idx) => (
-                        <ListItem key={idx}>
-                          <ListItemText
-                            primary={<code>{pattern}</code>}
-                            primaryTypographyProps={{ fontFamily: 'monospace', fontSize: '13px' }}
-                          />
-                          <ListItemSecondaryAction>
-                            <IconButton edge="end" size="small" onClick={() => handleDeletePattern(pattern)}>
-                              <CloseIcon fontSize="small" />
-                            </IconButton>
-                          </ListItemSecondaryAction>
-                        </ListItem>
-                      ))}
-                    </List>
-                  </Paper>
-                )}
-              </Box>
+              {/* string_extraction 전용 필드 */}
+              {editingTask?.category === 'string_extraction' && (
+                <>
+                  <Controller
+                    name="includeHrefLinks"
+                    control={control}
+                    render={({ field }) => (
+                      <FormControlLabel
+                        control={<Switch {...field} checked={field.value ?? true} />}
+                        label="href 링크 포함"
+                      />
+                    )}
+                  />
+                  <Controller
+                    name="includeTextUrls"
+                    control={control}
+                    render={({ field }) => (
+                      <FormControlLabel
+                        control={<Switch {...field} checked={field.value ?? false} />}
+                        label="텍스트 URL 포함"
+                      />
+                    )}
+                  />
+                  <Controller
+                    name="includeAbsolutePaths"
+                    control={control}
+                    render={({ field }) => (
+                      <FormControlLabel
+                        control={<Switch {...field} checked={field.value ?? true} />}
+                        label="절대경로 포함 (http://...)"
+                      />
+                    )}
+                  />
+                  <Controller
+                    name="includeRelativePaths"
+                    control={control}
+                    render={({ field }) => (
+                      <FormControlLabel
+                        control={<Switch {...field} checked={field.value ?? true} />}
+                        label="상대경로 포함 (/page, ../...)"
+                      />
+                    )}
+                  />
+                </>
+              )}
+
+              {/* resource_extraction 전용 필드 */}
+              {editingTask?.category === 'resource_extraction' && (
+                <Box>
+                  <Typography variant="subtitle2" gutterBottom>
+                    리소스 타입 선택
+                  </Typography>
+                  <Stack direction="row" spacing={1} flexWrap="wrap" gap={1}>
+                    {(['image', 'pdf', 'video', 'css', 'js'] as const).map(type => (
+                      <Chip
+                        key={type}
+                        label={type}
+                        color={resourceTypesState.includes(type) ? 'primary' : 'default'}
+                        onClick={() => toggleResourceType(type)}
+                        sx={{ cursor: 'pointer' }}
+                      />
+                    ))}
+                  </Stack>
+                </Box>
+              )}
             </Stack>
           </DialogContent>
           <DialogActions>

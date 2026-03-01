@@ -1,4 +1,4 @@
-import type { Pipeline, PipelineTask, ValidationResult, PipelineStats } from '../types'
+import type { Pipeline, PipelineTask, ValidationResult, PipelineStats, PipelineExecutionResult } from '../types'
 
 const checkPipelineAPI = () => {
   if (!window.pipeline) {
@@ -71,5 +71,26 @@ export const pipelineService = {
   async clone(pipelineId: string, newName?: string): Promise<Pipeline | null> {
     checkPipelineAPI()
     return window.pipeline.clone(pipelineId, newName)
+  },
+
+  // 실행
+  async execute(pipelineId: string, initialUrl: string): Promise<PipelineExecutionResult> {
+    checkPipelineAPI()
+    return window.pipeline.execute(pipelineId, initialUrl)
+  },
+
+  onExecutionProgress(callback: (event: unknown) => void): void {
+    if (!window.pipeline) return
+    window.pipeline.onExecutionProgress(callback as (event: import('../types').ExecutionProgressEvent) => void)
+  },
+
+  onExecutionComplete(callback: (result: unknown) => void): void {
+    if (!window.pipeline) return
+    window.pipeline.onExecutionComplete(callback as (result: PipelineExecutionResult) => void)
+  },
+
+  onExecutionError(callback: (error: string) => void): void {
+    if (!window.pipeline) return
+    window.pipeline.onExecutionError(callback)
   }
 }

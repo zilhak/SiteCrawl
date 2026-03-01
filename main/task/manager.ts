@@ -1,16 +1,22 @@
 /**
- * Task 관리자
+ * Task 관리자 (4종 통합)
  */
 
 import { randomUUID } from 'crypto'
 import type {
   Task,
-  CrawlTask,
-  ActionTask,
   AnyTask,
-  CreateCrawlTaskDTO,
-  CreateActionTaskDTO,
-  TaskValidationResult
+  TaskCategory,
+  CreateTaskDTO,
+  TaskValidationResult,
+  StringFilterTask,
+  PageNavigationTask,
+  StringExtractionTask,
+  ResourceExtractionTask,
+  StringFilterConfig,
+  PageNavigationConfig,
+  StringExtractionConfig,
+  ResourceExtractionConfig
 } from './types'
 import { TaskDatabase } from './database'
 
@@ -21,121 +27,50 @@ export class TaskManager {
     this.taskDB = taskDB
   }
 
-  // 자동으로 중복되지 않는 이름 생성
-  private generateUniqueName(category: 'crawl' | 'action'): string {
-    let counter = 1
-    let name = `new_task${counter}`
-
-    while (this.taskDB.taskNameExists(name, category)) {
-      counter++
-      name = `new_task${counter}`
-    }
-
-    return name
-  }
-
-  // CrawlTask 생성
-  createCrawlTask(dto: CreateCrawlTaskDTO): CrawlTask {
+  // 통합 Task 생성
+  createTask(dto: CreateTaskDTO): AnyTask {
     const now = Date.now()
-
-    const task: CrawlTask = {
+    const task: AnyTask = {
       id: randomUUID(),
       name: dto.name,
       description: dto.description,
-      category: 'crawl',
-      config: {
-        type: dto.type,
-        patterns: dto.patterns,
-        limit: dto.limit,
-        includeAbsolutePaths: dto.includeAbsolutePaths ?? true,
-        includeRelativePaths: dto.includeRelativePaths ?? true
-      },
+      category: dto.category,
+      config: dto.config,
       createdAt: now,
       updatedAt: now
-    }
+    } as AnyTask
 
     this.taskDB.saveTask(task)
     return task
   }
 
-  // ActionTask 생성
-  createActionTask(dto: CreateActionTaskDTO): ActionTask {
-    const now = Date.now()
-
-    const task: ActionTask = {
-      id: randomUUID(),
-      name: dto.name,
-      description: dto.description,
-      category: 'action',
-      config: {
-        type: dto.type,
-        path: dto.path
-      },
-      createdAt: now,
-      updatedAt: now
-    }
-
-    this.taskDB.saveTask(task)
-    return task
+  // 빠른 Task 생성 (카테고리별 기본값)
+  createQuickTask(category: TaskCategory): AnyTask {
+    const name = this.generateUniqueName(category)
+    const config = this.getDefaultConfig(category)
+    return this.createTask({ name, category, config })
   }
 
   // Task 업데이트
-  updateCrawlTask(id: string, updates: Partial<CreateCrawlTaskDTO>): { success: boolean; error?: string } {
+  updateTask(id: string, updates: Partial<CreateTaskDTO>): { success: boolean; error?: string } {
     const task = this.taskDB.getTask(id)
-
     if (!task) {
       return { success: false, error: 'Task를 찾을 수 없습니다.' }
     }
 
-    if (task.category !== 'crawl') {
-      return { success: false, error: 'CrawlTask가 아닙니다.' }
-    }
-
-    const updatedTask: CrawlTask = {
-      ...task as CrawlTask,
+    const updatedTask: AnyTask = {
+      ...task,
       name: updates.name ?? task.name,
       description: updates.description ?? task.description,
-      config: {
-        type: updates.type ?? (task as CrawlTask).config.type,
-        patterns: updates.patterns ?? (task as CrawlTask).config.patterns,
-        limit: updates.limit ?? (task as CrawlTask).config.limit,
-        includeAbsolutePaths: updates.includeAbsolutePaths ?? (task as CrawlTask).config.includeAbsolutePaths ?? true,
-        includeRelativePaths: updates.includeRelativePaths ?? (task as CrawlTask).config.includeRelativePaths ?? true,
-      },
+      config: updates.config ?? task.config,
       updatedAt: Date.now()
-    }
+    } as AnyTask
 
     this.taskDB.saveTask(updatedTask)
     return { success: true }
   }
 
-  updateActionTask(id: string, updates: Partial<CreateActionTaskDTO>): { success: boolean; error?: string } {
-    const task = this.taskDB.getTask(id)
-
-    if (!task) {
-      return { success: false, error: 'Task를 찾을 수 없습니다.' }
-    }
-
-    if (task.category !== 'action') {
-      return { success: false, error: 'ActionTask가 아닙니다.' }
-    }
-
-    const updatedTask: ActionTask = {
-      ...task as ActionTask,
-      name: updates.name ?? task.name,
-      description: updates.description ?? task.description,
-      config: {
-        type: updates.type ?? (task as ActionTask).config.type,
-        path: updates.path ?? (task as ActionTask).config.path
-      },
-      updatedAt: Date.now()
-    }
-
-    this.taskDB.saveTask(updatedTask)
-    return { success: true }
-  }
-
-  // Task 조회
+  // 조회
   getTask(id: string): AnyTask | null {
     return this.taskDB.getTask(id)
   }
@@ -144,162 +79,98 @@ export class TaskManager {
     return this.taskDB.getAllTasks()
   }
 
-  getCrawlTasks(): CrawlTask[] {
-    return this.taskDB.getTasksByCategory('crawl') as CrawlTask[]
-  }
-
-  getActionTasks(): ActionTask[] {
-    return this.taskDB.getTasksByCategory('action') as ActionTask[]
+  getTasksByCategory(category: TaskCategory): AnyTask[] {
+    return this.taskDB.getTasksByCategory(category)
   }
 
   searchTasks(query: string): AnyTask[] {
     return this.taskDB.searchTasks(query)
   }
 
-  // Task 삭제
+  // 삭제
   deleteTask(id: string): boolean {
     return this.taskDB.deleteTask(id)
   }
 
-  // 여러 Task 삭제
   deleteTasks(ids: string[]): number {
     return this.taskDB.deleteTasks(ids)
   }
 
-  // 빠른 CrawlTask 생성 (자동 이름)
-  createQuickCrawlTask(): CrawlTask {
-    const name = this.generateUniqueName('crawl')
-    const now = Date.now()
-
-    const task: CrawlTask = {
-      id: randomUUID(),
-      name,
-      description: '',
-      category: 'crawl',
-      config: {
-        type: 'whitelist',
-        includeAbsolutePaths: true,
-        includeRelativePaths: true,
-        patterns: [],
-        limit: -1
-      },
-      createdAt: now,
-      updatedAt: now
-    }
-
-    this.taskDB.saveTask(task)
-    return task
-  }
-
-  // 빠른 ActionTask 생성 (자동 이름)
-  createQuickActionTask(): ActionTask {
-    const name = this.generateUniqueName('action')
-    const now = Date.now()
-
-    const task: ActionTask = {
-      id: randomUUID(),
-      name,
-      description: '',
-      category: 'action',
-      config: {
-        type: 'store',
-        path: ''
-      },
-      createdAt: now,
-      updatedAt: now
-    }
-
-    this.taskDB.saveTask(task)
-    return task
-  }
-
-  // 페이지네이션 조회
-  getTasksPaginated(category: 'crawl' | 'action', page: number = 1, pageSize: number = 20) {
+  // 페이지네이션
+  getTasksPaginated(category: TaskCategory, page: number = 1, pageSize: number = 20) {
     return this.taskDB.getTasksPaginated(category, page, pageSize)
   }
 
   // Task 검증
-  validateCrawlTask(task: CrawlTask): TaskValidationResult {
+  validateTask(task: AnyTask): TaskValidationResult {
     const errors: string[] = []
     const warnings: string[] = []
 
-    // 이름 검증
     if (!task.name || task.name.trim().length === 0) {
       errors.push('Task 이름은 필수입니다.')
     }
 
-    // 패턴 검증
-    if (!task.config.patterns || task.config.patterns.length === 0) {
-      errors.push('최소 하나의 패턴이 필요합니다.')
-    } else {
-      // Regex 유효성 검증
-      for (const pattern of task.config.patterns) {
-        try {
-          new RegExp(pattern)
-        } catch (e) {
-          errors.push(`유효하지 않은 정규식: ${pattern}`)
+    switch (task.category) {
+      case 'string_filter': {
+        const config = task.config as StringFilterConfig
+        if (config.limit < -1) {
+          errors.push('Limit은 -1 이상이어야 합니다.')
         }
+        if (config.limit === 0) {
+          warnings.push('Limit이 0이면 결과가 비어있을 수 있습니다.')
+        }
+        break
+      }
+      case 'page_navigation': {
+        const config = task.config as PageNavigationConfig
+        if (config.timeout <= 0) {
+          errors.push('Timeout은 0보다 커야 합니다.')
+        }
+        break
+      }
+      case 'string_extraction': {
+        const config = task.config as StringExtractionConfig
+        if (!config.includeHrefLinks && !config.includeTextUrls) {
+          warnings.push('링크 추출 옵션이 모두 비활성화되어 있습니다.')
+        }
+        if (!config.includeAbsolutePaths && !config.includeRelativePaths) {
+          errors.push('최소 하나의 경로 유형을 선택해야 합니다.')
+        }
+        break
+      }
+      case 'resource_extraction': {
+        const config = task.config as ResourceExtractionConfig
+        if (!config.resourceTypes || config.resourceTypes.length === 0) {
+          errors.push('최소 하나의 리소스 타입을 선택해야 합니다.')
+        }
+        break
       }
     }
 
-    // Limit 검증
-    if (task.config.limit < -1) {
-      errors.push('Limit은 -1 이상이어야 합니다.')
-    }
+    return { valid: errors.length === 0, errors, warnings }
+  }
 
-    if (task.config.limit === 0) {
-      warnings.push('Limit이 0이면 결과가 비어있을 수 있습니다.')
-    }
-
-    return {
-      valid: errors.length === 0,
-      errors,
-      warnings
+  // 카테고리별 기본 설정
+  private getDefaultConfig(category: TaskCategory): any {
+    switch (category) {
+      case 'string_filter':
+        return { limit: -1 } as StringFilterConfig
+      case 'page_navigation':
+        return { waitUntil: 'domcontentloaded', timeout: 10000, handleCookies: true } as PageNavigationConfig
+      case 'string_extraction':
+        return { includeHrefLinks: true, includeTextUrls: false, includeAbsolutePaths: true, includeRelativePaths: true } as StringExtractionConfig
+      case 'resource_extraction':
+        return { resourceTypes: ['image'] } as ResourceExtractionConfig
     }
   }
 
-  validateActionTask(task: ActionTask): TaskValidationResult {
-    const errors: string[] = []
-    const warnings: string[] = []
-
-    // 이름 검증
-    if (!task.name || task.name.trim().length === 0) {
-      errors.push('Task 이름은 필수입니다.')
+  private generateUniqueName(category: TaskCategory): string {
+    let counter = 1
+    let name = `new_task${counter}`
+    while (this.taskDB.taskNameExists(name, category)) {
+      counter++
+      name = `new_task${counter}`
     }
-
-    // Action 타입별 검증
-    switch (task.config.type) {
-      case 'store':
-        // Path 검증
-        if (!task.config.path || task.config.path.trim().length === 0) {
-          errors.push('저장 경로(path)는 필수입니다.')
-        } else {
-          // 경로 문자 검증 (위험한 문자 체크)
-          const invalidChars = /[<>:"|?*]/
-          if (invalidChars.test(task.config.path)) {
-            errors.push('저장 경로에 유효하지 않은 문자가 포함되어 있습니다.')
-          }
-
-          // 상위 디렉토리 참조 확인
-          if (task.config.path.includes('..')) {
-            errors.push('저장 경로에 상위 디렉토리 참조(..)를 사용할 수 없습니다.')
-          }
-
-          // 절대 경로 확인 (상대 경로만 허용)
-          if (task.config.path.startsWith('/') || task.config.path.match(/^[a-zA-Z]:\\/)) {
-            errors.push('저장 경로는 상대 경로만 허용됩니다.')
-          }
-        }
-        break
-
-      default:
-        errors.push(`알 수 없는 액션 타입: ${task.config.type}`)
-    }
-
-    return {
-      valid: errors.length === 0,
-      errors,
-      warnings
-    }
+    return name
   }
 }
