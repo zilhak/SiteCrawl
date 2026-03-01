@@ -28,9 +28,11 @@ const createWindow = () => {
   mainWindow = new BrowserWindow({
     width: 1600,
     height: 1000,
-    minWidth: 1000,      // 최소 크기 제한
+    minWidth: 1000,
     minHeight: 700,
-    center: true,        // 화면 중앙에 배치
+    center: true,
+    frame: false,
+    titleBarStyle: 'hidden',
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -52,6 +54,23 @@ const createWindow = () => {
 }
 
 const setupIpcHandlers = (window: BrowserWindow) => {
+  // 창 제어
+  ipcMain.handle('window:minimize', () => window.minimize())
+  ipcMain.handle('window:maximize', () => {
+    if (window.isMaximized()) {
+      window.unmaximize()
+    } else {
+      window.maximize()
+    }
+    return window.isMaximized()
+  })
+  ipcMain.handle('window:close', () => window.close())
+  ipcMain.handle('window:is-maximized', () => window.isMaximized())
+
+  // 최대화 상태 변경 시 렌더러에 알림
+  window.on('maximize', () => window.webContents.send('window:maximized-changed', true))
+  window.on('unmaximize', () => window.webContents.send('window:maximized-changed', false))
+
   // 크롤링 시작
   ipcMain.handle('crawler:start', async (_event, url: string, useSession: boolean = false, options?: unknown) => {
     try {

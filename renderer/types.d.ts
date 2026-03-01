@@ -118,6 +118,13 @@ export interface PipelineExecutionResult {
 // Window API declarations
 declare global {
   interface Window {
+    windowControl: {
+      minimize: () => Promise<void>
+      maximize: () => Promise<boolean>
+      close: () => Promise<void>
+      isMaximized: () => Promise<boolean>
+      onMaximizedChange: (callback: (isMaximized: boolean) => void) => void
+    }
     crawler: {
       startCrawl: (url: string, useSession?: boolean, options?: unknown) => Promise<CrawlResult>
       onProgress: (callback: (data: { message: string }) => void) => void

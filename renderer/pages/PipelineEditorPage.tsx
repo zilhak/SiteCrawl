@@ -434,7 +434,7 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
   }, [nodes, edges, pipelineName, pipelineDesc])
 
   return (
-    <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+    <Box sx={{ height: 'calc(100vh - 32px)', display: 'flex', flexDirection: 'column' }}>
       {/* Header */}
       <AppBar position="static" color="default" elevation={0} sx={{ borderBottom: 1, borderColor: 'divider' }}>
         <Toolbar>

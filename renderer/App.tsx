@@ -17,6 +17,7 @@ import BugReportIcon from '@mui/icons-material/BugReport'
 import TaskIcon from '@mui/icons-material/Task'
 import AccountTreeIcon from '@mui/icons-material/AccountTree'
 
+import TitleBar from './components/TitleBar'
 import CrawlingPage from './pages/CrawlingPage'
 import CrawlTaskPage from './pages/CrawlTaskPage'
 import PipelinePage from './pages/PipelinePage'
@@ -98,6 +99,7 @@ function App() {
     return (
       <ThemeProvider theme={theme}>
         <CssBaseline />
+        <TitleBar />
         <PipelineEditorPage
           pipelineId={editingPipelineId}
           onClose={handleClosePipelineEditor}
@@ -110,10 +112,11 @@ function App() {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
+        <TitleBar />
         {/* 헤더 */}
-        <AppBar position="static" elevation={1}>
-          <Toolbar>
-            <Typography variant="h6" component="div" sx={{ flexGrow: 1, fontWeight: 700 }}>
+        <AppBar position="static" elevation={0} sx={{ borderBottom: 1, borderColor: 'divider' }}>
+          <Toolbar variant="dense">
+            <Typography variant="body1" component="div" sx={{ flexGrow: 1, fontWeight: 700 }}>
               SiteCrawl
             </Typography>
             <Button

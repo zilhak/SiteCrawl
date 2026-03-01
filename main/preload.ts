@@ -1,5 +1,15 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
+contextBridge.exposeInMainWorld('windowControl', {
+  minimize: () => ipcRenderer.invoke('window:minimize'),
+  maximize: () => ipcRenderer.invoke('window:maximize'),
+  close: () => ipcRenderer.invoke('window:close'),
+  isMaximized: () => ipcRenderer.invoke('window:is-maximized'),
+  onMaximizedChange: (callback: (isMaximized: boolean) => void) => {
+    ipcRenderer.on('window:maximized-changed', (_event, value) => callback(value))
+  }
+})
+
 contextBridge.exposeInMainWorld('crawler', {
   startCrawl: (url: string, useSession?: boolean, options?: unknown) =>
     ipcRenderer.invoke('crawler:start', url, useSession, options),
