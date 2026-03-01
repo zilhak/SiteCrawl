@@ -39,6 +39,7 @@ interface TaskPropertyPanelProps {
   data: TaskPropertyData
   parentCategory?: TaskCategory  // 부모 노드의 카테고리 (IO 호환성 표시)
   isParentRoot?: boolean         // 부모가 _run_인지
+  isReadOnly?: boolean           // _run_ 등 수정 불가 노드
   onUpdate: (updates: Partial<TaskPropertyData>) => void
   onClose: () => void
 }
@@ -83,6 +84,7 @@ export default function TaskPropertyPanel({
   data,
   parentCategory,
   isParentRoot,
+  isReadOnly,
   onUpdate,
   onClose
 }: TaskPropertyPanelProps) {
@@ -134,6 +136,25 @@ export default function TaskPropertyPanel({
 
       {/* 스크롤 영역 */}
       <Box sx={{ flex: 1, overflow: 'auto', p: 2 }}>
+        {isReadOnly ? (
+          <Stack spacing={2}>
+            <Alert severity="info" variant="outlined">
+              _run_ 노드는 파이프라인 진입점으로, 페이지 이동 Task로 고정되어 있습니다.
+            </Alert>
+            <TextField
+              fullWidth
+              size="small"
+              label="노드 이름"
+              value={data.taskName}
+              disabled
+            />
+            <Chip
+              label={CATEGORY_LABELS[data.taskCategory!]}
+              size="small"
+              color={CATEGORY_COLORS[data.taskCategory!]}
+            />
+          </Stack>
+        ) : (
         <Stack spacing={3}>
           {/* 이름 */}
           <TextField
@@ -246,19 +267,22 @@ export default function TaskPropertyPanel({
             </>
           )}
         </Stack>
+        )}
       </Box>
 
-      {/* 하단 적용 버튼 */}
-      <Box sx={{ p: 2, borderTop: 1, borderColor: 'divider' }}>
-        <Button
-          fullWidth
-          variant="contained"
-          onClick={handleApply}
-          disabled={!name.trim() || !category}
-        >
-          적용
-        </Button>
-      </Box>
+      {/* 하단 적용 버튼 (읽기 전용 시 숨김) */}
+      {!isReadOnly && (
+        <Box sx={{ p: 2, borderTop: 1, borderColor: 'divider' }}>
+          <Button
+            fullWidth
+            variant="contained"
+            onClick={handleApply}
+            disabled={!name.trim() || !category}
+          >
+            적용
+          </Button>
+        </Box>
+      )}
     </Box>
   )
 }

@@ -106,6 +106,7 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
       data: {
         nodeId: 'root',
         taskName: '_run_',
+        taskCategory: 'page_navigation',
         isRoot: true,
         isConfigured: true,
         onAddChild: handleAddChild,
@@ -188,6 +189,7 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
       data: {
         nodeId: 'root',
         taskName: '_run_',
+        taskCategory: 'page_navigation',
         isRoot: true,
         isConfigured: true,
         onAddChild: handleAddChild,
@@ -289,11 +291,7 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
   }, [])
 
   const handlePaneClick = useCallback(() => {
-    setSelectedNodeId(null)
-    setNodes(nds => nds.map(n => ({
-      ...n,
-      data: { ...n.data, isSelected: false }
-    })))
+    // 캔버스 빈 곳 클릭 시 속성 패널을 닫지 않음 (X 버튼으로만 닫기)
   }, [])
 
   const handleUpdateNode = useCallback((updates: Partial<TaskPropertyData>) => {
@@ -487,7 +485,7 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
         </Box>
 
         {/* 노드 속성 패널: 선택 시에만 캔버스 우측에 표시 */}
-        {selectedNode && !selectedNode.data.isRoot && (
+        {selectedNode && (
           <Box sx={{
             width: 300,
             borderLeft: 1,
@@ -505,6 +503,7 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
               }}
               parentCategory={parentData?.taskCategory}
               isParentRoot={parentData?.isRoot}
+              isReadOnly={!!(selectedNode.data as TaskNodeData).isRoot}
               onUpdate={handleUpdateNode}
               onClose={() => {
                 setSelectedNodeId(null)

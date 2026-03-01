@@ -4,7 +4,7 @@
 
 import { useState } from 'react'
 import { Handle, Position } from 'reactflow'
-import { Box, Paper, Typography, IconButton, Stack, Chip } from '@mui/material'
+import { Box, Paper, Typography, IconButton } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import DeleteIcon from '@mui/icons-material/Delete'
 import type { TaskCategory } from '../../types'
@@ -32,11 +32,9 @@ export default function TaskNode({ data }: { data: TaskNodeData }) {
       onMouseLeave={() => setIsHovered(false)}
       onClick={(e) => {
         e.stopPropagation()
-        if (!data.isRoot) {
-          data.onSelect(data.nodeId)
-        }
+        data.onSelect(data.nodeId)
       }}
-      sx={{ position: 'relative', cursor: data.isRoot ? 'default' : 'pointer' }}
+      sx={{ position: 'relative', cursor: 'pointer' }}
     >
       {/* Handle: 존재하지만 보이지 않음 */}
       <Handle
@@ -52,6 +50,7 @@ export default function TaskNode({ data }: { data: TaskNodeData }) {
           py: 0.75,
           width: 140,
           textAlign: 'center',
+          position: 'relative',
           bgcolor: data.isRoot
             ? 'primary.main'
             : data.isConfigured
@@ -76,22 +75,35 @@ export default function TaskNode({ data }: { data: TaskNodeData }) {
             : undefined,
         }}
       >
+        {/* 좌측 상단 카테고리 배지 */}
+        {data.taskCategory && (
+          <Box sx={{
+            position: 'absolute',
+            top: -6,
+            left: 4,
+            bgcolor: `${CATEGORY_COLORS[data.taskCategory]}.main`,
+            color: 'white',
+            fontSize: '7px',
+            fontWeight: 600,
+            lineHeight: 1,
+            px: 0.5,
+            py: '2px',
+            borderRadius: '3px',
+            letterSpacing: 0.2,
+            whiteSpace: 'nowrap',
+          }}>
+            {CATEGORY_LABELS[data.taskCategory]}
+          </Box>
+        )}
+
         {data.isRoot ? (
           <Typography sx={{ fontSize: '11px', fontWeight: 700 }}>
             _run_
           </Typography>
-        ) : data.isConfigured && data.taskCategory ? (
-          <Stack spacing={0.25} alignItems="center">
-            <Typography sx={{ fontSize: '11px', fontWeight: 600 }} noWrap>
-              {data.taskName}
-            </Typography>
-            <Chip
-              label={CATEGORY_LABELS[data.taskCategory]}
-              size="small"
-              color={CATEGORY_COLORS[data.taskCategory]}
-              sx={{ height: 16, fontSize: '9px', '& .MuiChip-label': { px: 0.75 } }}
-            />
-          </Stack>
+        ) : data.isConfigured ? (
+          <Typography sx={{ fontSize: '11px', fontWeight: 600 }} noWrap>
+            {data.taskName}
+          </Typography>
         ) : (
           <Typography sx={{ fontSize: '10px', color: 'text.secondary', fontStyle: 'italic' }}>
             클릭하여 설정
