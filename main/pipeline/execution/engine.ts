@@ -161,8 +161,8 @@ export class PipelineExecutionEngine {
         case 'page_navigation':
           output = await this.executePageNavigation(taskConfig, input)
           break
-        case 'string_extraction':
-          output = await this.executeStringExtraction(taskConfig, input)
+        case 'link_extraction':
+          output = await this.executeLinkExtraction(taskConfig, input)
           break
         case 'resource_extraction':
           output = await this.executeResourceExtraction(taskConfig, input)
@@ -261,14 +261,14 @@ export class PipelineExecutionEngine {
   }
 
   /**
-   * 문자열 추출 태스크: Page → string[]
+   * 링크 추출 태스크: Page → string[]
    */
-  private async executeStringExtraction(
+  private async executeLinkExtraction(
     config: Record<string, unknown>,
     input: TaskData
   ): Promise<TaskData> {
     if (input.type !== 'page') {
-      throw new Error(`StringExtractionTask는 page 입력이 필요합니다. 받은 타입: ${input.type}`)
+      throw new Error(`LinkExtractionTask는 page 입력이 필요합니다. 받은 타입: ${input.type}`)
     }
 
     const page = input.value

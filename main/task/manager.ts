@@ -11,11 +11,11 @@ import type {
   TaskValidationResult,
   StringFilterTask,
   PageNavigationTask,
-  StringExtractionTask,
+  LinkExtractionTask,
   ResourceExtractionTask,
   StringFilterConfig,
   PageNavigationConfig,
-  StringExtractionConfig,
+  LinkExtractionConfig,
   ResourceExtractionConfig
 } from './types'
 import { TaskDatabase } from './database'
@@ -128,8 +128,8 @@ export class TaskManager {
         }
         break
       }
-      case 'string_extraction': {
-        const config = task.config as StringExtractionConfig
+      case 'link_extraction': {
+        const config = task.config as LinkExtractionConfig
         if (!config.includeHrefLinks && !config.includeTextUrls) {
           warnings.push('링크 추출 옵션이 모두 비활성화되어 있습니다.')
         }
@@ -157,8 +157,8 @@ export class TaskManager {
         return { limit: -1 } as StringFilterConfig
       case 'page_navigation':
         return { waitUntil: 'domcontentloaded', timeout: 10000, handleCookies: true } as PageNavigationConfig
-      case 'string_extraction':
-        return { includeHrefLinks: true, includeTextUrls: false, includeAbsolutePaths: true, includeRelativePaths: true } as StringExtractionConfig
+      case 'link_extraction':
+        return { includeHrefLinks: true, includeTextUrls: false, includeAbsolutePaths: true, includeRelativePaths: true } as LinkExtractionConfig
       case 'resource_extraction':
         return { resourceTypes: ['image'] } as ResourceExtractionConfig
     }

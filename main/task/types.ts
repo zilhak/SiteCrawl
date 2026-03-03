@@ -4,7 +4,7 @@
  */
 
 // Task 카테고리
-export type TaskCategory = 'string_filter' | 'page_navigation' | 'string_extraction' | 'resource_extraction'
+export type TaskCategory = 'string_filter' | 'page_navigation' | 'link_extraction' | 'resource_extraction'
 
 // 기본 Task 인터페이스
 export interface Task {
@@ -41,13 +41,13 @@ export interface PageNavigationConfig {
   handleCookies: boolean
 }
 
-// 3. 문자열 추출 태스크: Page → string[]
-export interface StringExtractionTask extends Task {
-  category: 'string_extraction'
-  config: StringExtractionConfig
+// 3. 링크 추출 태스크: Page → string[]
+export interface LinkExtractionTask extends Task {
+  category: 'link_extraction'
+  config: LinkExtractionConfig
 }
 
-export interface StringExtractionConfig {
+export interface LinkExtractionConfig {
   includeHrefLinks: boolean       // a[href] 링크 추출
   includeTextUrls: boolean        // 본문 텍스트 내 URL 추출
   includeAbsolutePaths: boolean   // 절대경로 포함
@@ -69,10 +69,10 @@ export interface ResourceExtractionConfig {
 export type ResourceType = 'image' | 'pdf' | 'video' | 'css' | 'js'
 
 // Task 유니온 타입
-export type AnyTask = StringFilterTask | PageNavigationTask | StringExtractionTask | ResourceExtractionTask
+export type AnyTask = StringFilterTask | PageNavigationTask | LinkExtractionTask | ResourceExtractionTask
 
 // Task Config 유니온 타입
-export type AnyTaskConfig = StringFilterConfig | PageNavigationConfig | StringExtractionConfig | ResourceExtractionConfig
+export type AnyTaskConfig = StringFilterConfig | PageNavigationConfig | LinkExtractionConfig | ResourceExtractionConfig
 
 // Task 생성 DTO
 export interface CreateTaskDTO {

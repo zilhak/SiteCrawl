@@ -51,7 +51,7 @@ function getDefaultConfig(category: TaskCategory): Record<string, unknown> {
       return { mode: 'whitelist', regex: '', wildcards: [], limit: -1 }
     case 'page_navigation':
       return { waitUntil: 'domcontentloaded', timeout: 30000, handleCookies: true }
-    case 'string_extraction':
+    case 'link_extraction':
       return {
         includeHrefLinks: true, includeTextUrls: true,
         includeAbsolutePaths: true, includeRelativePaths: true,
@@ -250,8 +250,8 @@ export default function TaskPropertyPanel({
                   />
                 )}
 
-                {category === 'string_extraction' && (
-                  <StringExtractionConfig
+                {category === 'link_extraction' && (
+                  <LinkExtractionConfig
                     config={config}
                     onChange={handleConfigChange}
                   />
@@ -439,7 +439,7 @@ function PageNavigationConfig({ config, onChange }: ConfigProps) {
   )
 }
 
-function StringExtractionConfig({ config, onChange }: ConfigProps) {
+function LinkExtractionConfig({ config, onChange }: ConfigProps) {
   return (
     <Stack spacing={2}>
       <FormControlLabel

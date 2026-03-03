@@ -14,7 +14,7 @@ export type TaskData =
 export const TASK_IO_MAP = {
   string_filter: { input: 'strings', output: 'strings' },
   page_navigation: { input: 'url', output: 'page' },
-  string_extraction: { input: 'page', output: 'strings' },
+  link_extraction: { input: 'page', output: 'strings' },
   resource_extraction: { input: 'strings', output: 'strings' }
 } as const
 

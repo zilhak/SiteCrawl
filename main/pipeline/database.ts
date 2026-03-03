@@ -53,6 +53,11 @@ export class PipelineDatabase {
       )
     `)
 
+    // string_extraction → link_extraction 마이그레이션
+    try {
+      this.db.prepare(`UPDATE pipeline_tasks SET category = 'link_extraction' WHERE category = 'string_extraction'`).run()
+    } catch { /* 테이블이 없으면 무시 */ }
+
     // Pipeline 실행 히스토리
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS pipeline_executions (

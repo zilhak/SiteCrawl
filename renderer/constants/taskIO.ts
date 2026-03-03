@@ -8,21 +8,21 @@ import type { TaskCategory } from '../types'
 export const TASK_IO_MAP: Record<TaskCategory, { input: string; output: string }> = {
   string_filter: { input: 'strings', output: 'strings' },
   page_navigation: { input: 'url', output: 'page' },
-  string_extraction: { input: 'page', output: 'strings' },
+  link_extraction: { input: 'page', output: 'strings' },
   resource_extraction: { input: 'strings', output: 'strings' }
 }
 
 export const CATEGORY_LABELS: Record<TaskCategory, string> = {
   string_filter: '문자열 필터',
   page_navigation: '페이지 이동',
-  string_extraction: '문자열 추출',
+  link_extraction: '링크 추출',
   resource_extraction: '리소스 추출'
 }
 
 export const CATEGORY_COLORS: Record<TaskCategory, 'warning' | 'info' | 'success' | 'secondary'> = {
   string_filter: 'warning',
   page_navigation: 'info',
-  string_extraction: 'success',
+  link_extraction: 'success',
   resource_extraction: 'secondary'
 }
 

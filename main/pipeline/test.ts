@@ -43,7 +43,7 @@ function testSimpleChain() {
     name: 'Simple Chain',
     tasks: [
       makeTask('navigate', '_run_', 'page_navigation', { waitUntil: 'domcontentloaded', timeout: 30000 }),
-      makeTask('extract', 'navigate', 'string_extraction', { includeHrefLinks: true }),
+      makeTask('extract', 'navigate', 'link_extraction', { includeHrefLinks: true }),
       makeTask('filter', 'extract', 'string_filter', { limit: 10 })
     ],
     createdAt: Date.now(),
@@ -74,8 +74,8 @@ function testBranching() {
     name: 'Branching',
     tasks: [
       makeTask('navigate', '_run_', 'page_navigation', { waitUntil: 'load' }),
-      makeTask('extract_links', 'navigate', 'string_extraction', { includeHrefLinks: true }),
-      makeTask('extract_resources', 'navigate', 'string_extraction', { includeTextUrls: true }),
+      makeTask('extract_links', 'navigate', 'link_extraction', { includeHrefLinks: true }),
+      makeTask('extract_resources', 'navigate', 'link_extraction', { includeTextUrls: true }),
       makeTask('filter_links', 'extract_links', 'string_filter', { limit: 5 })
     ],
     createdAt: Date.now(),
@@ -107,7 +107,7 @@ function testComplexDAG() {
     name: 'Complex DAG',
     tasks: [
       makeTask('navigate', '_run_', 'page_navigation', { waitUntil: 'domcontentloaded' }),
-      makeTask('extract_all', 'navigate', 'string_extraction', { includeHrefLinks: true, includeTextUrls: true }),
+      makeTask('extract_all', 'navigate', 'link_extraction', { includeHrefLinks: true, includeTextUrls: true }),
       makeTask('filter_products', 'extract_all', 'string_filter', { limit: -1 }),
       makeTask('filter_blogs', 'extract_all', 'string_filter', { limit: 20 }),
       makeTask('resource_imgs', 'filter_products', 'resource_extraction', { resourceTypes: ['image'] }),
@@ -142,7 +142,7 @@ function testCycleDetection() {
     name: 'Cyclic (Invalid)',
     tasks: [
       makeTask('a', '_run_', 'page_navigation'),
-      makeTask('b', 'a', 'string_extraction'),
+      makeTask('b', 'a', 'link_extraction'),
       makeTask('c', 'b', 'string_filter'),
       makeTask('d', 'c', 'string_filter'),
       makeTask('e', 'd', 'string_filter'),
@@ -202,7 +202,7 @@ function testValidation() {
     name: 'Duplicate',
     tasks: [
       makeTask('task', '_run_', 'page_navigation'),
-      makeTask('task', 'task', 'string_extraction')
+      makeTask('task', 'task', 'link_extraction')
     ],
     createdAt: Date.now(),
     updatedAt: Date.now()
@@ -218,7 +218,7 @@ function testValidation() {
     name: 'Invalid Trigger',
     tasks: [
       makeTask('a', '_run_', 'page_navigation'),
-      makeTask('b', 'nonexistent', 'string_extraction')
+      makeTask('b', 'nonexistent', 'link_extraction')
     ],
     createdAt: Date.now(),
     updatedAt: Date.now()
@@ -241,8 +241,8 @@ function testDAGOperations() {
     name: 'DAG Ops',
     tasks: [
       makeTask('root', '_run_', 'page_navigation'),
-      makeTask('a', 'root', 'string_extraction'),
-      makeTask('b', 'root', 'string_extraction'),
+      makeTask('a', 'root', 'link_extraction'),
+      makeTask('b', 'root', 'link_extraction'),
       makeTask('c', 'a', 'string_filter'),
       makeTask('d', 'a', 'resource_extraction', { resourceTypes: ['image'] }),
       makeTask('e', 'b', 'string_filter')

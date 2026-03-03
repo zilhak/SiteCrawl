@@ -3,7 +3,7 @@
  */
 
 // Task 카테고리 (pipeline 내에서도 사용)
-export type PipelineTaskCategory = 'string_filter' | 'page_navigation' | 'string_extraction' | 'resource_extraction'
+export type PipelineTaskCategory = 'string_filter' | 'page_navigation' | 'link_extraction' | 'resource_extraction'
 
 // Pipeline Task (DAG 노드) - JSON이 본체, Task 설정을 인라인으로 포함
 export interface PipelineTask {

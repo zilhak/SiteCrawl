@@ -24,12 +24,15 @@ export class TaskDatabase {
       this.db.exec('DROP TABLE IF EXISTS tasks')
     }
 
+    // string_extraction → link_extraction 마이그레이션
+    this.migrateCategories()
+
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS tasks (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
         description TEXT,
-        category TEXT NOT NULL CHECK(category IN ('string_filter', 'page_navigation', 'string_extraction', 'resource_extraction')),
+        category TEXT NOT NULL CHECK(category IN ('string_filter', 'page_navigation', 'link_extraction', 'resource_extraction')),
         config TEXT NOT NULL,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
@@ -50,6 +53,16 @@ export class TaskDatabase {
       CREATE INDEX IF NOT EXISTS idx_tasks_name ON tasks(name);
       CREATE INDEX IF NOT EXISTS idx_task_order_category ON task_order(category, order_index);
     `)
+  }
+
+  private migrateCategories(): void {
+    try {
+      // 기존 string_extraction → link_extraction 마이그레이션
+      this.db.prepare(`UPDATE tasks SET category = 'link_extraction' WHERE category = 'string_extraction'`).run()
+      this.db.prepare(`UPDATE task_order SET category = 'link_extraction' WHERE category = 'string_extraction'`).run()
+    } catch {
+      // 테이블이 없으면 무시
+    }
   }
 
   private isNewSchema(): boolean {

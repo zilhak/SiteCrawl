@@ -41,14 +41,14 @@ import { taskService } from '../services/taskService'
 const CATEGORY_LABELS: Record<TaskCategory, string> = {
   string_filter: '문자열 필터',
   page_navigation: '페이지 이동',
-  string_extraction: '문자열 추출',
+  link_extraction: '링크 추출',
   resource_extraction: '리소스 추출'
 }
 
 const ALL_CATEGORIES: TaskCategory[] = [
   'string_filter',
   'page_navigation',
-  'string_extraction',
+  'link_extraction',
   'resource_extraction'
 ]
 
@@ -67,7 +67,7 @@ const pageNavigationSchema = baseSchema.extend({
   handleCookies: z.boolean()
 })
 
-const stringExtractionSchema = baseSchema.extend({
+const linkExtractionSchema = baseSchema.extend({
   includeHrefLinks: z.boolean(),
   includeTextUrls: z.boolean(),
   includeAbsolutePaths: z.boolean(),
@@ -87,7 +87,7 @@ type EditFormData = {
   waitUntil?: 'domcontentloaded' | 'load' | 'networkidle'
   timeout?: number
   handleCookies?: boolean
-  // string_extraction
+  // link_extraction
   includeHrefLinks?: boolean
   includeTextUrls?: boolean
   includeAbsolutePaths?: boolean
@@ -217,7 +217,7 @@ export default function TaskManagementPage({ isStorageActive }: TaskManagementPa
       base.waitUntil = (cfg.waitUntil as 'domcontentloaded' | 'load' | 'networkidle') ?? 'domcontentloaded'
       base.timeout = typeof cfg.timeout === 'number' ? cfg.timeout : 30000
       base.handleCookies = typeof cfg.handleCookies === 'boolean' ? cfg.handleCookies : false
-    } else if (task.category === 'string_extraction') {
+    } else if (task.category === 'link_extraction') {
       base.includeHrefLinks = typeof cfg.includeHrefLinks === 'boolean' ? cfg.includeHrefLinks : true
       base.includeTextUrls = typeof cfg.includeTextUrls === 'boolean' ? cfg.includeTextUrls : false
       base.includeAbsolutePaths = typeof cfg.includeAbsolutePaths === 'boolean' ? cfg.includeAbsolutePaths : true
@@ -267,8 +267,8 @@ export default function TaskManagementPage({ isStorageActive }: TaskManagementPa
         timeout: data.timeout,
         handleCookies: data.handleCookies
       }
-    } else if (editingTask.category === 'string_extraction') {
-      const parsed = stringExtractionSchema.safeParse(data)
+    } else if (editingTask.category === 'link_extraction') {
+      const parsed = linkExtractionSchema.safeParse(data)
       if (!parsed.success) {
         alert(parsed.error.issues[0].message)
         return
@@ -329,7 +329,7 @@ export default function TaskManagementPage({ isStorageActive }: TaskManagementPa
       const waitUntil = cfg.waitUntil ?? 'domcontentloaded'
       const timeout = cfg.timeout ?? 30000
       return `${waitUntil} / ${timeout}ms`
-    } else if (task.category === 'string_extraction') {
+    } else if (task.category === 'link_extraction') {
       const count = [
         cfg.includeHrefLinks,
         cfg.includeTextUrls,
@@ -369,7 +369,7 @@ export default function TaskManagementPage({ isStorageActive }: TaskManagementPa
             태스크 관리
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            문자열 필터, 페이지 이동, 문자열 추출, 리소스 추출 태스크를 통합 관리합니다.
+            문자열 필터, 페이지 이동, 링크 추출, 리소스 추출 태스크를 통합 관리합니다.
           </Typography>
         </Box>
         <Stack direction="row" spacing={1}>
@@ -588,8 +588,8 @@ export default function TaskManagementPage({ isStorageActive }: TaskManagementPa
                 </>
               )}
 
-              {/* string_extraction 전용 필드 */}
-              {editingTask?.category === 'string_extraction' && (
+              {/* link_extraction 전용 필드 */}
+              {editingTask?.category === 'link_extraction' && (
                 <>
                   <Controller
                     name="includeHrefLinks"
