@@ -29,6 +29,7 @@ export class HistoryDatabase {
 
     this.dbPath = path.join(storagePath, 'sitecrawl.db')
     this.db = new Database(this.dbPath)
+    this.db.pragma('journal_mode = WAL')
     this.initialize()
   }
 
