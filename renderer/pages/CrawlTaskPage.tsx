@@ -43,7 +43,8 @@ const CATEGORY_LABELS: Record<TaskCategory, string> = {
   page_navigation: '페이지 이동',
   link_extraction: '링크 추출',
   resource_extraction: '리소스 추출',
-  string_db_save: 'DB 저장'
+  string_db_save: 'DB 저장',
+  string_display: '화면 표시'
 }
 
 const ALL_CATEGORIES: TaskCategory[] = [
@@ -51,7 +52,8 @@ const ALL_CATEGORIES: TaskCategory[] = [
   'page_navigation',
   'link_extraction',
   'resource_extraction',
-  'string_db_save'
+  'string_db_save',
+  'string_display'
 ]
 
 // --- Zod 스키마 ---
@@ -84,6 +86,10 @@ const stringDbSaveSchema = baseSchema.extend({
   deduplication: z.boolean()
 })
 
+const stringDisplaySchema = baseSchema.extend({
+  label: z.string().optional()
+})
+
 // 편집 폼 데이터 타입 (모든 필드의 합집합)
 type EditFormData = {
   name: string
@@ -102,6 +108,8 @@ type EditFormData = {
   resourceTypes?: ('image' | 'pdf' | 'video' | 'css' | 'js')[]
   // string_db_save
   deduplication?: boolean
+  // string_display
+  label?: string
 }
 
 interface TaskManagementPageProps {
@@ -236,6 +244,8 @@ export default function TaskManagementPage({ isStorageActive }: TaskManagementPa
       setResourceTypesState(rt)
     } else if (task.category === 'string_db_save') {
       base.deduplication = typeof cfg.deduplication === 'boolean' ? cfg.deduplication : false
+    } else if (task.category === 'string_display') {
+      base.label = typeof cfg.label === 'string' ? cfg.label : ''
     }
 
     return base
@@ -303,6 +313,13 @@ export default function TaskManagementPage({ isStorageActive }: TaskManagementPa
         return
       }
       configUpdate = { deduplication: data.deduplication ?? false }
+    } else if (editingTask.category === 'string_display') {
+      const parsed = stringDisplaySchema.safeParse(data)
+      if (!parsed.success) {
+        alert(parsed.error.issues[0].message)
+        return
+      }
+      configUpdate = { label: data.label ?? '' }
     }
 
     // 낙관적 업데이트
@@ -359,6 +376,8 @@ export default function TaskManagementPage({ isStorageActive }: TaskManagementPa
       return `${rt.length}개 리소스 타입`
     } else if (task.category === 'string_db_save') {
       return cfg.deduplication ? '중복 제거' : '전체 저장'
+    } else if (task.category === 'string_display') {
+      return cfg.label ? `제목: ${cfg.label}` : '기본 표시'
     }
     return ''
   }
@@ -671,6 +690,16 @@ export default function TaskManagementPage({ isStorageActive }: TaskManagementPa
                     ))}
                   </Stack>
                 </Box>
+              )}
+
+              {/* string_display 전용 필드 */}
+              {editingTask?.category === 'string_display' && (
+                <TextField
+                  fullWidth
+                  label="표시 제목 (선택)"
+                  placeholder="예: 추출된 링크 목록"
+                  {...register('label')}
+                />
               )}
 
               {/* string_db_save 전용 필드 */}

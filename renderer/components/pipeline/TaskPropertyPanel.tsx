@@ -63,6 +63,8 @@ function getDefaultConfig(category: TaskCategory): Record<string, unknown> {
       }
     case 'string_db_save':
       return { deduplication: false }
+    case 'string_display':
+      return { label: '' }
   }
 }
 
@@ -265,6 +267,13 @@ export default function TaskPropertyPanel({
 
                 {category === 'string_db_save' && (
                   <StringDbSaveConfigForm
+                    config={config}
+                    onChange={handleConfigChange}
+                  />
+                )}
+
+                {category === 'string_display' && (
+                  <StringDisplayConfigForm
                     config={config}
                     onChange={handleConfigChange}
                   />
@@ -504,6 +513,21 @@ function StringDbSaveConfigForm({ config, onChange }: ConfigProps) {
           />
         }
         label="중복 제거 (이미 저장된 문자열 건너뛰기)"
+      />
+    </Stack>
+  )
+}
+
+function StringDisplayConfigForm({ config, onChange }: ConfigProps) {
+  return (
+    <Stack spacing={2}>
+      <TextField
+        fullWidth
+        size="small"
+        label="표시 제목 (선택)"
+        placeholder="예: 추출된 링크 목록"
+        value={(config.label as string) || ''}
+        onChange={(e) => onChange('label', e.target.value)}
       />
     </Stack>
   )

@@ -18,13 +18,15 @@ export const TASK_IO_MAP = {
   page_navigation: { input: 'url', output: 'page' },
   link_extraction: { input: 'page', output: 'urls' },
   resource_extraction: { input: 'urls', output: 'urls' },
-  string_db_save: { input: 'strings', output: 'strings' }
+  string_db_save: { input: 'strings', output: 'strings' },
+  string_display: { input: 'strings', output: 'strings' }
 } as const
 
 // 노드 실행 결과
 export interface NodeExecutionResult {
   taskName: string
   taskId: string
+  category?: string
   success: boolean
   output: TaskData | null
   error?: string

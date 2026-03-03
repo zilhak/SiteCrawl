@@ -327,7 +327,40 @@ export default function CrawlingPage({ options, isStorageActive }: CrawlingPageP
                     {nodeResult.error}
                   </Typography>
                 )}
-                {nodeResult.output && nodeResult.output.type === 'strings' && (
+                {nodeResult.output && nodeResult.output.type === 'strings' && nodeResult.category === 'string_display' && (
+                  <Box sx={{ mt: 1 }}>
+                    <Typography variant="subtitle2" fontWeight={600} gutterBottom>
+                      {(nodeResult.output as any).label || nodeResult.taskName} ({(nodeResult.output.value as string[]).length}개)
+                    </Typography>
+                    <Paper
+                      variant="outlined"
+                      sx={{ maxHeight: 400, overflow: 'auto', bgcolor: 'background.default' }}
+                    >
+                      {(nodeResult.output.value as string[]).map((item, i) => (
+                        <Box
+                          key={i}
+                          sx={{
+                            px: 1.5, py: 0.75,
+                            borderBottom: '1px solid',
+                            borderColor: 'divider',
+                            cursor: 'pointer',
+                            '&:hover': { bgcolor: 'action.hover' },
+                            '&:last-child': { borderBottom: 'none' }
+                          }}
+                          onClick={() => {
+                            void navigator.clipboard.writeText(item)
+                          }}
+                          title="클릭하여 복사"
+                        >
+                          <Typography variant="body2" sx={{ wordBreak: 'break-all' }}>
+                            {item}
+                          </Typography>
+                        </Box>
+                      ))}
+                    </Paper>
+                  </Box>
+                )}
+                {nodeResult.output && nodeResult.output.type === 'strings' && nodeResult.category !== 'string_display' && (
                   <Box sx={{ mt: 1 }}>
                     <Typography variant="caption" color="text.secondary">
                       결과: {(nodeResult.output.value as string[]).length}개 항목

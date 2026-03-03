@@ -28,7 +28,7 @@ export interface CrawlHistory {
 }
 
 // Task
-export type TaskCategory = 'string_filter' | 'page_navigation' | 'link_extraction' | 'resource_extraction' | 'string_db_save'
+export type TaskCategory = 'string_filter' | 'page_navigation' | 'link_extraction' | 'resource_extraction' | 'string_db_save' | 'string_display'
 
 export interface Task {
   id: string
@@ -86,6 +86,7 @@ export interface ExecutionProgressEvent {
 export interface NodeExecutionResult {
   taskName: string
   taskId: string
+  category?: string
   success: boolean
   output: { type: string; value: unknown } | null
   error?: string

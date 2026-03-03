@@ -4,7 +4,7 @@
  */
 
 // Task 카테고리
-export type TaskCategory = 'string_filter' | 'page_navigation' | 'link_extraction' | 'resource_extraction' | 'string_db_save'
+export type TaskCategory = 'string_filter' | 'page_navigation' | 'link_extraction' | 'resource_extraction' | 'string_db_save' | 'string_display'
 
 // 기본 Task 인터페이스
 export interface Task {
@@ -78,11 +78,21 @@ export interface StringDbSaveConfig {
   deduplication: boolean  // 같은 pipeline에서 이미 저장된 문자열 중복 방지
 }
 
+// 6. 문자열 화면 표시 태스크: string[] → string[] (pass-through)
+export interface StringDisplayTask extends Task {
+  category: 'string_display'
+  config: StringDisplayConfig
+}
+
+export interface StringDisplayConfig {
+  label?: string  // 표시 영역 제목 (미지정 시 태스크 이름 사용)
+}
+
 // Task 유니온 타입
-export type AnyTask = StringFilterTask | PageNavigationTask | LinkExtractionTask | ResourceExtractionTask | StringDbSaveTask
+export type AnyTask = StringFilterTask | PageNavigationTask | LinkExtractionTask | ResourceExtractionTask | StringDbSaveTask | StringDisplayTask
 
 // Task Config 유니온 타입
-export type AnyTaskConfig = StringFilterConfig | PageNavigationConfig | LinkExtractionConfig | ResourceExtractionConfig | StringDbSaveConfig
+export type AnyTaskConfig = StringFilterConfig | PageNavigationConfig | LinkExtractionConfig | ResourceExtractionConfig | StringDbSaveConfig | StringDisplayConfig
 
 // Task 생성 DTO
 export interface CreateTaskDTO {

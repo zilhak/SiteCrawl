@@ -18,7 +18,9 @@ import type {
   PageNavigationConfig,
   LinkExtractionConfig,
   ResourceExtractionConfig,
-  StringDbSaveConfig
+  StringDbSaveConfig,
+  StringDisplayTask,
+  StringDisplayConfig
 } from './types'
 import { TaskDatabase } from './database'
 
@@ -151,6 +153,10 @@ export class TaskManager {
         // 설정이 단순하여 특별한 검증 불필요
         break
       }
+      case 'string_display': {
+        // 설정이 단순하여 특별한 검증 불필요
+        break
+      }
     }
 
     return { valid: errors.length === 0, errors, warnings }
@@ -169,6 +175,8 @@ export class TaskManager {
         return { resourceTypes: ['image'] } as ResourceExtractionConfig
       case 'string_db_save':
         return { deduplication: false } as StringDbSaveConfig
+      case 'string_display':
+        return { label: '' } as StringDisplayConfig
     }
   }
 

@@ -180,6 +180,9 @@ export class PipelineExecutionEngine {
         case 'string_db_save':
           output = await this.executeStringDbSave(taskConfig, input)
           break
+        case 'string_display':
+          output = await this.executeStringDisplay(taskConfig, input)
+          break
         default:
           throw new Error(`알 수 없는 Task 카테고리: ${category}`)
       }
@@ -187,6 +190,7 @@ export class PipelineExecutionEngine {
       return {
         taskName: node.name,
         taskId,
+        category,
         success: true,
         output,
         startedAt,
@@ -196,6 +200,7 @@ export class PipelineExecutionEngine {
       return {
         taskName: node.name,
         taskId,
+        category,
         success: false,
         output: null,
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -413,6 +418,22 @@ export class PipelineExecutionEngine {
     }
 
     // pass-through: 입력 그대로 반환 (불변 원칙)
+    return { type: 'strings', value: [...input.value] }
+  }
+
+  /**
+   * 문자열 화면 표시 태스크: string[] → string[] (pass-through)
+   */
+  private async executeStringDisplay(
+    _config: Record<string, unknown>,
+    input: TaskData
+  ): Promise<TaskData> {
+    if (input.type !== 'strings') {
+      throw new Error(`StringDisplayTask는 strings 입력이 필요합니다. 받은 타입: ${input.type}`)
+    }
+
+    // pass-through: 입력 그대로 반환 (불변 원칙)
+    // 프론트엔드에서 category === 'string_display'인 결과를 특별히 렌더링
     return { type: 'strings', value: [...input.value] }
   }
 
