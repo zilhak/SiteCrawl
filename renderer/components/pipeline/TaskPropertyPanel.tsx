@@ -1,14 +1,13 @@
 /**
  * Task 속성 편집 패널 (독립 컴포넌트)
- * 파이프라인 에디터의 우측 패널에서 사용하며, 향후 별도 페이지에서도 재사용 가능
+ * 모든 변경이 즉시 적용됨 (로컬 상태 없음, 완전 제어 컴포넌트)
  */
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import {
   Box,
   Typography,
   TextField,
-  Button,
   Stack,
   Chip,
   Alert,
@@ -37,9 +36,9 @@ export interface TaskPropertyData {
 
 interface TaskPropertyPanelProps {
   data: TaskPropertyData
-  parentCategory?: TaskCategory  // 부모 노드의 카테고리 (IO 호환성 표시)
-  isParentRoot?: boolean         // 부모가 _run_인지
-  isReadOnly?: boolean           // _run_ 등 수정 불가 노드
+  parentCategory?: TaskCategory
+  isParentRoot?: boolean
+  isReadOnly?: boolean
   onUpdate: (updates: Partial<TaskPropertyData>) => void
   onClose: () => void
 }
@@ -70,11 +69,8 @@ function getDefaultConfig(category: TaskCategory): Record<string, unknown> {
 // IO 호환성 체크 (urls → strings 단방향 상속)
 function isIOCompatible(output: string, input: string): boolean {
   if (output === input) return true
-  // urls → strings: 호환 (urls IS strings)
   if (output === 'urls' && input === 'strings') return true
-  // url → strings/urls: 호환
   if (output === 'url' && (input === 'strings' || input === 'urls')) return true
-  // strings → urls: 비호환 (URL 검증 필요)
   return false
 }
 
@@ -100,33 +96,24 @@ export default function TaskPropertyPanel({
   onUpdate,
   onClose
 }: TaskPropertyPanelProps) {
-  const [name, setName] = useState(data.taskName)
-  const [category, setCategory] = useState<TaskCategory | undefined>(data.taskCategory)
-  const [config, setConfig] = useState<Record<string, unknown>>(
-    data.taskConfig || (data.taskCategory ? getDefaultConfig(data.taskCategory) : {})
-  )
+  // 로컬 상태 없음 - props에서 직접 읽고, 변경 시 즉시 onUpdate 호출
+  const category = data.taskCategory
+  const config = data.taskConfig || (category ? getDefaultConfig(category) : {})
 
-  // data가 변경되면 로컬 상태 동기화
-  useEffect(() => {
-    setName(data.taskName)
-    setCategory(data.taskCategory)
-    setConfig(data.taskConfig || (data.taskCategory ? getDefaultConfig(data.taskCategory) : {}))
-  }, [data.taskName, data.taskCategory, data.taskConfig])
+  const handleNameChange = (newName: string) => {
+    onUpdate({ taskName: newName })
+  }
 
   const handleCategoryChange = (newCategory: TaskCategory) => {
-    setCategory(newCategory)
-    setConfig(getDefaultConfig(newCategory))
+    onUpdate({
+      taskCategory: newCategory,
+      taskConfig: getDefaultConfig(newCategory)
+    })
   }
 
   const handleConfigChange = (key: string, value: unknown) => {
-    setConfig(prev => ({ ...prev, [key]: value }))
-  }
-
-  const handleApply = () => {
     onUpdate({
-      taskName: name,
-      taskCategory: category,
-      taskConfig: config
+      taskConfig: { ...config, [key]: value }
     })
   }
 
@@ -173,8 +160,8 @@ export default function TaskPropertyPanel({
             fullWidth
             size="small"
             label="노드 이름"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
+            value={data.taskName}
+            onChange={(e) => handleNameChange(e.target.value)}
           />
 
           {/* IO 호환성 표시 */}
@@ -288,20 +275,6 @@ export default function TaskPropertyPanel({
         </Stack>
         )}
       </Box>
-
-      {/* 하단 적용 버튼 (읽기 전용 시 숨김) */}
-      {!isReadOnly && (
-        <Box sx={{ p: 2, borderTop: 1, borderColor: 'divider' }}>
-          <Button
-            fullWidth
-            variant="contained"
-            onClick={handleApply}
-            disabled={!name.trim() || !category}
-          >
-            적용
-          </Button>
-        </Box>
-      )}
     </Box>
   )
 }
