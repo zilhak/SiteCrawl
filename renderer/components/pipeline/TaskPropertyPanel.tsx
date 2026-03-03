@@ -62,6 +62,8 @@ function getDefaultConfig(category: TaskCategory): Record<string, unknown> {
         resourceTypes: ['image'],
         filterMode: '', filterRegex: '', filterWildcards: []
       }
+    case 'string_db_save':
+      return { deduplication: false }
   }
 }
 
@@ -83,7 +85,7 @@ function getIOCompatibility(
 ): 'compatible' | 'incompatible' | 'unknown' {
   if (!currentCategory) return 'unknown'
 
-  const parentOutput = isParentRoot ? 'url' : parentCategory ? TASK_IO_MAP[parentCategory].output : null
+  const parentOutput = isParentRoot ? 'page' : parentCategory ? TASK_IO_MAP[parentCategory].output : null
   if (!parentOutput) return 'unknown'
 
   const currentInput = TASK_IO_MAP[currentCategory].input
@@ -129,7 +131,7 @@ export default function TaskPropertyPanel({
   }
 
   const compatibility = getIOCompatibility(parentCategory, !!isParentRoot, category)
-  const parentOutput = isParentRoot ? 'url' : parentCategory ? TASK_IO_MAP[parentCategory].output : null
+  const parentOutput = isParentRoot ? 'page' : parentCategory ? TASK_IO_MAP[parentCategory].output : null
   const currentInput = category ? TASK_IO_MAP[category].input : null
 
   return (
@@ -269,6 +271,13 @@ export default function TaskPropertyPanel({
 
                 {category === 'resource_extraction' && (
                   <ResourceExtractionConfig
+                    config={config}
+                    onChange={handleConfigChange}
+                  />
+                )}
+
+                {category === 'string_db_save' && (
+                  <StringDbSaveConfigForm
                     config={config}
                     onChange={handleConfigChange}
                   />
@@ -510,6 +519,22 @@ const RESOURCE_TYPES = [
   { value: 'css', label: 'CSS' },
   { value: 'js', label: 'JS' }
 ] as const
+
+function StringDbSaveConfigForm({ config, onChange }: ConfigProps) {
+  return (
+    <Stack spacing={2}>
+      <FormControlLabel
+        control={
+          <Switch
+            checked={!!config.deduplication}
+            onChange={(e) => onChange('deduplication', e.target.checked)}
+          />
+        }
+        label="중복 제거 (이미 저장된 문자열 건너뛰기)"
+      />
+    </Stack>
+  )
+}
 
 function ResourceExtractionConfig({ config, onChange }: ConfigProps) {
   const selected = (config.resourceTypes as string[]) || []

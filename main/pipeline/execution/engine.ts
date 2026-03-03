@@ -21,15 +21,20 @@ import { TASK_IO_MAP } from './types'
 
 export interface EngineDependencies {
   onProgress: (event: ExecutionProgressEvent) => void
+  saveStrings?: (pipelineId: string, executionId: string, strings: string[], deduplication: boolean) => void
 }
 
 export class PipelineExecutionEngine {
   private onProgress: (event: ExecutionProgressEvent) => void
+  private saveStringsFn?: (pipelineId: string, executionId: string, strings: string[], deduplication: boolean) => void
   private browser: Browser | null = null
   private context: BrowserContext | null = null
+  private currentPipelineId: string = ''
+  private currentExecutionId: string = ''
 
   constructor(deps: EngineDependencies) {
     this.onProgress = deps.onProgress
+    this.saveStringsFn = deps.saveStrings
   }
 
   /**
@@ -42,6 +47,8 @@ export class PipelineExecutionEngine {
   ): Promise<PipelineExecutionResult> {
     const startedAt = Date.now()
     const results: NodeExecutionResult[] = []
+    this.currentPipelineId = pipeline.id
+    this.currentExecutionId = executionId
 
     try {
       // 1. 검증
@@ -66,13 +73,16 @@ export class PipelineExecutionEngine {
       // 3. 브라우저 초기화
       await this.initBrowser()
 
-      // 4. 노드별 출력 저장소
+      // 4. _run_ 초기 페이지 이동 (진입점)
+      const initialPage = await this.executeInitialNavigation(initialUrl)
+
+      // 5. 노드별 출력 저장소
       const nodeOutputs = new Map<string, TaskData>()
 
-      // 5. 실패한 노드 추적 (하위 브랜치 스킵용)
+      // 6. 실패한 노드 추적 (하위 브랜치 스킵용)
       const failedNodes = new Set<string>()
 
-      // 6. 위상 정렬 순서대로 실행
+      // 7. 위상 정렬 순서대로 실행
       for (const node of executionOrder) {
         // 부모가 실패했으면 이 노드도 스킵
         if (this.isAncestorFailed(node, dag, failedNodes)) {
@@ -93,7 +103,7 @@ export class PipelineExecutionEngine {
         this.emitProgress(executionId, node, 'running', '실행 중...')
 
         // 부모 출력 가져오기
-        const parentOutput = this.getParentOutput(node, nodeOutputs, initialUrl)
+        const parentOutput = this.getParentOutput(node, nodeOutputs, initialPage)
 
         // 입력 타입 어댑팅
         const adaptedInput = this.adaptInput(parentOutput, node.category)
@@ -111,7 +121,7 @@ export class PipelineExecutionEngine {
         }
       }
 
-      // 7. 최종 상태 결정
+      // 8. 최종 상태 결정
       const allSuccess = results.every(r => r.success)
       const allFailed = results.every(r => !r.success)
       const status = allSuccess ? 'completed' : allFailed ? 'failed' : 'partially_failed'
@@ -166,6 +176,9 @@ export class PipelineExecutionEngine {
           break
         case 'resource_extraction':
           output = await this.executeResourceExtraction(taskConfig, input)
+          break
+        case 'string_db_save':
+          output = await this.executeStringDbSave(taskConfig, input)
           break
         default:
           throw new Error(`알 수 없는 Task 카테고리: ${category}`)
@@ -382,16 +395,38 @@ export class PipelineExecutionEngine {
   }
 
   /**
+   * 문자열 DB 저장 태스크: string[] → string[] (pass-through)
+   */
+  private async executeStringDbSave(
+    config: Record<string, unknown>,
+    input: TaskData
+  ): Promise<TaskData> {
+    if (input.type !== 'strings') {
+      throw new Error(`StringDbSaveTask는 strings 입력이 필요합니다. 받은 타입: ${input.type}`)
+    }
+
+    const deduplication = (config.deduplication as boolean) ?? false
+
+    // DB에 저장
+    if (this.saveStringsFn) {
+      this.saveStringsFn(this.currentPipelineId, this.currentExecutionId, input.value, deduplication)
+    }
+
+    // pass-through: 입력 그대로 반환 (불변 원칙)
+    return { type: 'strings', value: [...input.value] }
+  }
+
+  /**
    * 부모 노드의 출력 가져오기
    */
   private getParentOutput(
     node: DAGNode,
     nodeOutputs: Map<string, TaskData>,
-    initialUrl: string
+    initialPage: Page
   ): TaskData {
-    // 루트 노드: 초기 URL
+    // 루트 노드: _run_ 이 수행한 페이지 이동 결과 (Page 객체)
     if (node.trigger === '_run_') {
-      return { type: 'url', value: initialUrl }
+      return { type: 'page', value: initialPage }
     }
 
     // 부모 노드의 출력
@@ -494,6 +529,27 @@ export class PipelineExecutionEngine {
       args: ['--disable-dev-shm-usage', '--no-sandbox']
     })
     this.context = await this.browser.newContext()
+  }
+
+  /**
+   * _run_ 초기 페이지 이동 (진입점)
+   * 사용자가 입력한 URL로 이동하여 Page 객체를 반환
+   */
+  private async executeInitialNavigation(initialUrl: string): Promise<Page> {
+    if (!this.context) {
+      throw new Error('브라우저가 초기화되지 않았습니다.')
+    }
+
+    const page = await this.context.newPage()
+    await page.goto(initialUrl, {
+      waitUntil: 'domcontentloaded',
+      timeout: 30000
+    })
+
+    // 쿠키 동의 팝업 처리
+    await this.handleCookieConsent(page)
+
+    return page
   }
 
   /**
