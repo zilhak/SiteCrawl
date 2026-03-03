@@ -261,7 +261,7 @@ export class PipelineExecutionEngine {
   }
 
   /**
-   * 링크 추출 태스크: Page → string[]
+   * 링크 추출 태스크: Page → URL[]
    */
   private async executeLinkExtraction(
     config: Record<string, unknown>,
@@ -330,18 +330,18 @@ export class PipelineExecutionEngine {
     // Page 닫기 (리소스 정리)
     await page.close()
 
-    return { type: 'strings', value: filtered }
+    return { type: 'urls', value: filtered }
   }
 
   /**
-   * 리소스 추출 태스크: string[] → string[]
+   * 리소스 추출 태스크: URL[] → URL[]
    */
   private async executeResourceExtraction(
     config: Record<string, unknown>,
     input: TaskData
   ): Promise<TaskData> {
-    if (input.type !== 'strings') {
-      throw new Error(`ResourceExtractionTask는 strings 입력이 필요합니다. 받은 타입: ${input.type}`)
+    if (input.type !== 'urls' && input.type !== 'strings') {
+      throw new Error(`ResourceExtractionTask는 urls 또는 strings 입력이 필요합니다. 받은 타입: ${input.type}`)
     }
 
     // 리소스 타입별 확장자 매핑
@@ -378,7 +378,7 @@ export class PipelineExecutionEngine {
       result = PipelineExecutionEngine.applyFilter(result, filterMode, filterRegex, filterWildcards)
     }
 
-    return { type: 'strings', value: result }
+    return { type: 'urls', value: result }
   }
 
   /**
@@ -415,21 +415,29 @@ export class PipelineExecutionEngine {
 
     const expectedInput = expected.input
 
-    // 이미 호환되면 그대로 (strings → strings일 때 새 배열 복사)
+    // 정확히 일치하면 복사만 (불변 원칙)
     if (parentOutput.type === expectedInput) {
-      if (parentOutput.type === 'strings') {
-        return { type: 'strings', value: [...parentOutput.value] }
+      if (parentOutput.type === 'strings' || parentOutput.type === 'urls') {
+        return { type: parentOutput.type, value: [...parentOutput.value] }
       }
       return parentOutput
     }
 
-    // url → strings: 배열로 래핑
-    if (parentOutput.type === 'url' && expectedInput === 'strings') {
-      return { type: 'strings', value: [parentOutput.value] }
+    // urls ↔ strings 호환 (urls는 strings를 상속)
+    if (parentOutput.type === 'urls' && expectedInput === 'strings') {
+      return { type: 'strings', value: [...parentOutput.value] }
+    }
+    if (parentOutput.type === 'strings' && expectedInput === 'urls') {
+      return { type: 'urls', value: [...parentOutput.value] }
     }
 
-    // strings → url: 첫 번째 요소 사용
-    if (parentOutput.type === 'strings' && expectedInput === 'url') {
+    // url → strings/urls: 배열로 래핑
+    if (parentOutput.type === 'url' && (expectedInput === 'strings' || expectedInput === 'urls')) {
+      return { type: expectedInput as 'strings' | 'urls', value: [parentOutput.value] }
+    }
+
+    // strings/urls → url: 첫 번째 요소 사용
+    if ((parentOutput.type === 'strings' || parentOutput.type === 'urls') && expectedInput === 'url') {
       if (parentOutput.value.length === 0) {
         throw new Error('빈 목록에서 URL을 가져올 수 없습니다.')
       }

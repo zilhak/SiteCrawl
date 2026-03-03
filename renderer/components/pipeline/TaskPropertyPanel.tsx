@@ -65,7 +65,16 @@ function getDefaultConfig(category: TaskCategory): Record<string, unknown> {
   }
 }
 
-// IO 호환성 체크
+// IO 호환성 체크 (urls는 strings를 상속)
+function isIOCompatible(output: string, input: string): boolean {
+  if (output === input) return true
+  // urls ↔ strings 호환
+  if ((output === 'urls' && input === 'strings') || (output === 'strings' && input === 'urls')) return true
+  // url → strings/urls 호환
+  if (output === 'url' && (input === 'strings' || input === 'urls')) return true
+  return false
+}
+
 function getIOCompatibility(
   parentCategory: TaskCategory | undefined,
   isParentRoot: boolean,
@@ -77,7 +86,7 @@ function getIOCompatibility(
   if (!parentOutput) return 'unknown'
 
   const currentInput = TASK_IO_MAP[currentCategory].input
-  return parentOutput === currentInput ? 'compatible' : 'incompatible'
+  return isIOCompatible(parentOutput, currentInput) ? 'compatible' : 'incompatible'
 }
 
 export default function TaskPropertyPanel({
