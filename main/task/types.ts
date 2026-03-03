@@ -4,7 +4,7 @@
  */
 
 // Task 카테고리
-export type TaskCategory = 'string_filter' | 'page_navigation' | 'link_extraction' | 'resource_extraction'
+export type TaskCategory = 'string_filter' | 'page_navigation' | 'link_extraction' | 'resource_extraction' | 'string_db_save'
 
 // 기본 Task 인터페이스
 export interface Task {
@@ -68,11 +68,21 @@ export interface ResourceExtractionConfig {
 
 export type ResourceType = 'image' | 'pdf' | 'video' | 'css' | 'js'
 
+// 5. 문자열 DB 저장 태스크: string[] → string[] (pass-through)
+export interface StringDbSaveTask extends Task {
+  category: 'string_db_save'
+  config: StringDbSaveConfig
+}
+
+export interface StringDbSaveConfig {
+  deduplication: boolean  // 같은 pipeline에서 이미 저장된 문자열 중복 방지
+}
+
 // Task 유니온 타입
-export type AnyTask = StringFilterTask | PageNavigationTask | LinkExtractionTask | ResourceExtractionTask
+export type AnyTask = StringFilterTask | PageNavigationTask | LinkExtractionTask | ResourceExtractionTask | StringDbSaveTask
 
 // Task Config 유니온 타입
-export type AnyTaskConfig = StringFilterConfig | PageNavigationConfig | LinkExtractionConfig | ResourceExtractionConfig
+export type AnyTaskConfig = StringFilterConfig | PageNavigationConfig | LinkExtractionConfig | ResourceExtractionConfig | StringDbSaveConfig
 
 // Task 생성 DTO
 export interface CreateTaskDTO {

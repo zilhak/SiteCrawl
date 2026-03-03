@@ -17,7 +17,8 @@ export const TASK_IO_MAP = {
   string_filter: { input: 'strings', output: 'strings' },
   page_navigation: { input: 'url', output: 'page' },
   link_extraction: { input: 'page', output: 'urls' },
-  resource_extraction: { input: 'urls', output: 'urls' }
+  resource_extraction: { input: 'urls', output: 'urls' },
+  string_db_save: { input: 'strings', output: 'strings' }
 } as const
 
 // 노드 실행 결과

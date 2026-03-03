@@ -394,6 +394,11 @@ const setupIpcHandlers = (window: BrowserWindow) => {
     const engine = new PipelineExecutionEngine({
       onProgress: (event) => {
         window.webContents.send('pipeline:execution-progress', event)
+      },
+      saveStrings: (pid, eid, strings, dedup) => {
+        if (pipelineDB) {
+          pipelineDB.saveStrings(pid, eid, strings, dedup)
+        }
       }
     })
 

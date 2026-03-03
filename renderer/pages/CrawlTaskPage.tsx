@@ -42,14 +42,16 @@ const CATEGORY_LABELS: Record<TaskCategory, string> = {
   string_filter: '문자열 필터',
   page_navigation: '페이지 이동',
   link_extraction: '링크 추출',
-  resource_extraction: '리소스 추출'
+  resource_extraction: '리소스 추출',
+  string_db_save: 'DB 저장'
 }
 
 const ALL_CATEGORIES: TaskCategory[] = [
   'string_filter',
   'page_navigation',
   'link_extraction',
-  'resource_extraction'
+  'resource_extraction',
+  'string_db_save'
 ]
 
 // --- Zod 스키마 ---
@@ -78,6 +80,10 @@ const resourceExtractionSchema = baseSchema.extend({
   resourceTypes: z.array(z.enum(['image', 'pdf', 'video', 'css', 'js']))
 })
 
+const stringDbSaveSchema = baseSchema.extend({
+  deduplication: z.boolean()
+})
+
 // 편집 폼 데이터 타입 (모든 필드의 합집합)
 type EditFormData = {
   name: string
@@ -94,6 +100,8 @@ type EditFormData = {
   includeRelativePaths?: boolean
   // resource_extraction
   resourceTypes?: ('image' | 'pdf' | 'video' | 'css' | 'js')[]
+  // string_db_save
+  deduplication?: boolean
 }
 
 interface TaskManagementPageProps {
@@ -226,6 +234,8 @@ export default function TaskManagementPage({ isStorageActive }: TaskManagementPa
       const rt = Array.isArray(cfg.resourceTypes) ? (cfg.resourceTypes as string[]) : []
       base.resourceTypes = rt as ('image' | 'pdf' | 'video' | 'css' | 'js')[]
       setResourceTypesState(rt)
+    } else if (task.category === 'string_db_save') {
+      base.deduplication = typeof cfg.deduplication === 'boolean' ? cfg.deduplication : false
     }
 
     return base
@@ -286,6 +296,13 @@ export default function TaskManagementPage({ isStorageActive }: TaskManagementPa
         return
       }
       configUpdate = { resourceTypes: resourceTypesState }
+    } else if (editingTask.category === 'string_db_save') {
+      const parsed = stringDbSaveSchema.safeParse(data)
+      if (!parsed.success) {
+        alert(parsed.error.issues[0].message)
+        return
+      }
+      configUpdate = { deduplication: data.deduplication ?? false }
     }
 
     // 낙관적 업데이트
@@ -340,6 +357,8 @@ export default function TaskManagementPage({ isStorageActive }: TaskManagementPa
     } else if (task.category === 'resource_extraction') {
       const rt = Array.isArray(cfg.resourceTypes) ? cfg.resourceTypes : []
       return `${rt.length}개 리소스 타입`
+    } else if (task.category === 'string_db_save') {
+      return cfg.deduplication ? '중복 제거' : '전체 저장'
     }
     return ''
   }
@@ -652,6 +671,20 @@ export default function TaskManagementPage({ isStorageActive }: TaskManagementPa
                     ))}
                   </Stack>
                 </Box>
+              )}
+
+              {/* string_db_save 전용 필드 */}
+              {editingTask?.category === 'string_db_save' && (
+                <Controller
+                  name="deduplication"
+                  control={control}
+                  render={({ field }) => (
+                    <FormControlLabel
+                      control={<Switch {...field} checked={field.value ?? false} />}
+                      label="중복 제거 (이미 저장된 문자열 건너뛰기)"
+                    />
+                  )}
+                />
               )}
             </Stack>
           </DialogContent>

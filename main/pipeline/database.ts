@@ -72,6 +72,18 @@ export class PipelineDatabase {
       )
     `)
 
+    // 저장된 문자열 테이블 (string_db_save 태스크용)
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS saved_strings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        pipeline_id TEXT NOT NULL,
+        value TEXT NOT NULL,
+        execution_id TEXT,
+        saved_at INTEGER NOT NULL,
+        FOREIGN KEY (pipeline_id) REFERENCES pipelines(id) ON DELETE CASCADE
+      )
+    `)
+
     // 인덱스 생성
     this.db.exec(`
       CREATE INDEX IF NOT EXISTS idx_pipeline_tasks_pipeline
@@ -82,6 +94,9 @@ export class PipelineDatabase {
 
       CREATE INDEX IF NOT EXISTS idx_pipeline_executions_pipeline
         ON pipeline_executions(pipeline_id, started_at DESC);
+
+      CREATE INDEX IF NOT EXISTS idx_saved_strings_pipeline
+        ON saved_strings(pipeline_id);
     `)
   }
 
@@ -264,6 +279,68 @@ export class PipelineDatabase {
     `)
 
     return stmt.all(pipelineId, limit) as any[]
+  }
+
+  /**
+   * 문자열 DB 저장 (string_db_save 태스크용)
+   */
+  saveStrings(
+    pipelineId: string,
+    executionId: string,
+    strings: string[],
+    deduplication: boolean = false
+  ): void {
+    if (!this.db) return
+
+    const now = Date.now()
+
+    if (deduplication) {
+      // 이미 저장된 문자열 조회
+      const existing = new Set(
+        (this.db.prepare(`SELECT value FROM saved_strings WHERE pipeline_id = ?`).all(pipelineId) as { value: string }[])
+          .map(row => row.value)
+      )
+      const newStrings = strings.filter(s => !existing.has(s))
+
+      const stmt = this.db.prepare(`
+        INSERT INTO saved_strings (pipeline_id, value, execution_id, saved_at)
+        VALUES (?, ?, ?, ?)
+      `)
+      for (const s of newStrings) {
+        stmt.run(pipelineId, s, executionId, now)
+      }
+    } else {
+      const stmt = this.db.prepare(`
+        INSERT INTO saved_strings (pipeline_id, value, execution_id, saved_at)
+        VALUES (?, ?, ?, ?)
+      `)
+      for (const s of strings) {
+        stmt.run(pipelineId, s, executionId, now)
+      }
+    }
+  }
+
+  /**
+   * Pipeline에 저장된 문자열 조회
+   */
+  getSavedStrings(pipelineId: string): string[] {
+    if (!this.db) return []
+
+    const rows = this.db.prepare(`
+      SELECT value FROM saved_strings
+      WHERE pipeline_id = ?
+      ORDER BY saved_at ASC
+    `).all(pipelineId) as { value: string }[]
+
+    return rows.map(row => row.value)
+  }
+
+  /**
+   * Pipeline의 저장된 문자열 초기화
+   */
+  clearSavedStrings(pipelineId: string): void {
+    if (!this.db) return
+    this.db.prepare(`DELETE FROM saved_strings WHERE pipeline_id = ?`).run(pipelineId)
   }
 
   /**

@@ -13,10 +13,12 @@ import type {
   PageNavigationTask,
   LinkExtractionTask,
   ResourceExtractionTask,
+  StringDbSaveTask,
   StringFilterConfig,
   PageNavigationConfig,
   LinkExtractionConfig,
-  ResourceExtractionConfig
+  ResourceExtractionConfig,
+  StringDbSaveConfig
 } from './types'
 import { TaskDatabase } from './database'
 
@@ -145,6 +147,10 @@ export class TaskManager {
         }
         break
       }
+      case 'string_db_save': {
+        // 설정이 단순하여 특별한 검증 불필요
+        break
+      }
     }
 
     return { valid: errors.length === 0, errors, warnings }
@@ -161,6 +167,8 @@ export class TaskManager {
         return { includeHrefLinks: true, includeTextUrls: false, includeAbsolutePaths: true, includeRelativePaths: true } as LinkExtractionConfig
       case 'resource_extraction':
         return { resourceTypes: ['image'] } as ResourceExtractionConfig
+      case 'string_db_save':
+        return { deduplication: false } as StringDbSaveConfig
     }
   }
 
