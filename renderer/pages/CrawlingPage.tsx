@@ -160,8 +160,8 @@ export default function CrawlingPage({ options, isStorageActive }: CrawlingPageP
               }}
             />
           )}
-          renderOption={(props, option) => (
-            <Box component="li" {...props}>
+          renderOption={({ key, ...props }, option) => (
+            <Box component="li" key={key} {...props}>
               <Box>
                 <Typography variant="body2">{option.name}</Typography>
                 <Typography variant="caption" color="text.secondary">
