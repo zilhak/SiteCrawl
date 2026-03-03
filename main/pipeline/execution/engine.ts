@@ -423,21 +423,36 @@ export class PipelineExecutionEngine {
       return parentOutput
     }
 
-    // urls ↔ strings 호환 (urls는 strings를 상속)
+    // urls → strings: 호환 (urls IS strings)
     if (parentOutput.type === 'urls' && expectedInput === 'strings') {
       return { type: 'strings', value: [...parentOutput.value] }
     }
+
+    // strings → urls: URL 유효성 검증을 거쳐 변환
     if (parentOutput.type === 'strings' && expectedInput === 'urls') {
-      return { type: 'urls', value: [...parentOutput.value] }
+      return { type: 'urls', value: PipelineExecutionEngine.validateUrls(parentOutput.value) }
     }
 
-    // url → strings/urls: 배열로 래핑
-    if (parentOutput.type === 'url' && (expectedInput === 'strings' || expectedInput === 'urls')) {
-      return { type: expectedInput as 'strings' | 'urls', value: [parentOutput.value] }
+    // url → strings: 배열로 래핑
+    if (parentOutput.type === 'url' && expectedInput === 'strings') {
+      return { type: 'strings', value: [parentOutput.value] }
     }
 
-    // strings/urls → url: 첫 번째 요소 사용
-    if ((parentOutput.type === 'strings' || parentOutput.type === 'urls') && expectedInput === 'url') {
+    // url → urls: 배열로 래핑
+    if (parentOutput.type === 'url' && expectedInput === 'urls') {
+      return { type: 'urls', value: [parentOutput.value] }
+    }
+
+    // urls → url: 첫 번째 요소 사용
+    if (parentOutput.type === 'urls' && expectedInput === 'url') {
+      if (parentOutput.value.length === 0) {
+        throw new Error('빈 URL 목록에서 URL을 가져올 수 없습니다.')
+      }
+      return { type: 'url', value: parentOutput.value[0] }
+    }
+
+    // strings → url: 첫 번째 요소 사용
+    if (parentOutput.type === 'strings' && expectedInput === 'url') {
       if (parentOutput.value.length === 0) {
         throw new Error('빈 목록에서 URL을 가져올 수 없습니다.')
       }
@@ -532,6 +547,20 @@ export class PipelineExecutionEngine {
         continue
       }
     }
+  }
+
+  /**
+   * 문자열 배열에서 유효한 URL만 필터링하여 반환
+   */
+  private static validateUrls(strings: string[]): string[] {
+    return strings.filter(s => {
+      try {
+        new URL(s)
+        return true
+      } catch {
+        return false
+      }
+    })
   }
 
   /**

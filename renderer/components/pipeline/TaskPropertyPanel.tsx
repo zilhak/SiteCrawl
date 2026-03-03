@@ -65,13 +65,14 @@ function getDefaultConfig(category: TaskCategory): Record<string, unknown> {
   }
 }
 
-// IO 호환성 체크 (urls는 strings를 상속)
+// IO 호환성 체크 (urls → strings 단방향 상속)
 function isIOCompatible(output: string, input: string): boolean {
   if (output === input) return true
-  // urls ↔ strings 호환
-  if ((output === 'urls' && input === 'strings') || (output === 'strings' && input === 'urls')) return true
-  // url → strings/urls 호환
+  // urls → strings: 호환 (urls IS strings)
+  if (output === 'urls' && input === 'strings') return true
+  // url → strings/urls: 호환
   if (output === 'url' && (input === 'strings' || input === 'urls')) return true
+  // strings → urls: 비호환 (URL 검증 필요)
   return false
 }
 
