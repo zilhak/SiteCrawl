@@ -348,7 +348,16 @@ export default function CrawlingPage({ options, isStorageActive }: CrawlingPageP
                             '&:last-child': { borderBottom: 'none' }
                           }}
                           onClick={() => {
-                            void navigator.clipboard.writeText(item)
+                            try {
+                              const ta = document.createElement('textarea')
+                              ta.value = item
+                              ta.style.position = 'fixed'
+                              ta.style.opacity = '0'
+                              document.body.appendChild(ta)
+                              ta.select()
+                              document.execCommand('copy')
+                              document.body.removeChild(ta)
+                            } catch { /* ignore */ }
                           }}
                           title="클릭하여 복사"
                         >
