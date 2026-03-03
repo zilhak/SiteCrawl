@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -63,7 +63,7 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
 
   const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
-  const [nodeCounter, setNodeCounter] = useState(0)
+  const nodeCounterRef = useRef(0)
 
   // 우측 패널: 선택된 노드
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
@@ -178,7 +178,7 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
 
     setNodes(newNodes)
     setEdges(newEdges)
-    setNodeCounter(counter)
+    nodeCounterRef.current = counter
   }
 
   const initializeNodes = () => {
@@ -203,10 +203,6 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
 
   // --- 핸들러 ---
 
-  // nodeCounter를 ref로 관리하여 콜백이 안정적 참조 유지
-  const nodeCounterRef = { current: nodeCounter }
-  nodeCounterRef.current = nodeCounter
-
   const handleAddChild = useCallback((parentId: string) => {
     // setEdges/setNodes 함수형 업데이트로만 상태 접근 → stale closure 방지
     setEdges(currentEdges => {
@@ -220,7 +216,7 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
 
       const counter = nodeCounterRef.current
       const newNodeId = `node-${counter}`
-      setNodeCounter(counter + 1)
+      nodeCounterRef.current = counter + 1
 
       const childCount = currentEdges.filter(e => e.source === parentId).length
 
@@ -266,7 +262,10 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
 
   const handleDeleteNode = useCallback((nodeId: string) => {
     setEdges(currentEdges => {
+      const visited = new Set<string>()
       const findDescendants = (id: string): string[] => {
+        if (visited.has(id)) return []
+        visited.add(id)
         const children = currentEdges.filter(e => e.source === id).map(e => e.target)
         return [id, ...children.flatMap(findDescendants)]
       }
