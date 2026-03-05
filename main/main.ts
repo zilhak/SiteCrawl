@@ -399,6 +399,17 @@ const setupIpcHandlers = (window: BrowserWindow) => {
         if (pipelineDB) {
           pipelineDB.saveStrings(pid, eid, strings, dedup)
         }
+      },
+      checkVisitedPage: (domain, path) => {
+        if (pipelineDB) {
+          return pipelineDB.checkVisitedPage(domain, path)
+        }
+        return false
+      },
+      saveVisitedPage: (domain, path) => {
+        if (pipelineDB) {
+          pipelineDB.saveVisitedPage(domain, path)
+        }
       }
     })
 

@@ -23,11 +23,15 @@ import { ResultStore } from './result'
 export interface EngineDependencies {
   onProgress: (event: ExecutionProgressEvent) => void
   saveStrings?: (pipelineId: string, executionId: string, strings: string[], deduplication: boolean) => void
+  checkVisitedPage?: (domain: string, path: string) => boolean
+  saveVisitedPage?: (domain: string, path: string) => void
 }
 
 export class PipelineExecutionEngine {
   private onProgress: (event: ExecutionProgressEvent) => void
   private saveStringsFn?: (pipelineId: string, executionId: string, strings: string[], deduplication: boolean) => void
+  private checkVisitedPageFn?: (domain: string, path: string) => boolean
+  private saveVisitedPageFn?: (domain: string, path: string) => void
   private browser: Browser | null = null
   private context: BrowserContext | null = null
   private currentPipelineId: string = ''
@@ -37,6 +41,8 @@ export class PipelineExecutionEngine {
   constructor(deps: EngineDependencies) {
     this.onProgress = deps.onProgress
     this.saveStringsFn = deps.saveStrings
+    this.checkVisitedPageFn = deps.checkVisitedPage
+    this.saveVisitedPageFn = deps.saveVisitedPage
   }
 
   /**
@@ -126,7 +132,11 @@ export class PipelineExecutionEngine {
     const results: NodeExecutionResult[] = []
     const nodeOutputs = new Map<string, TaskData>()
     const failedNodes = new Set<string>()
+    const gatedNodes = new Set<string>()
     const executionOrder = dag.topologicalSort()
+
+    // 게이트 카테고리: output이 null이면 하위 노드 스킵
+    const GATE_CATEGORIES = new Set(['page_db_check'])
 
     for (const node of executionOrder) {
       // 부모가 실패했으면 이 노드도 스킵
@@ -144,6 +154,23 @@ export class PipelineExecutionEngine {
         continue
       }
 
+      // 부모가 게이트로 닫혔으면 이 노드도 스킵 (실패는 아님)
+      if (this.isAncestorGated(node, dag, gatedNodes)) {
+        gatedNodes.add(node.name)
+        results.push({
+          taskName: node.name,
+          taskId: node.taskId || node.name,
+          category: node.category,
+          success: true,
+          output: null,
+          error: '조건 미충족으로 건너뜀',
+          startedAt: Date.now(),
+          completedAt: Date.now()
+        })
+        this.emitProgress(executionId, node, 'completed', '조건 미충족으로 건너뜀')
+        continue
+      }
+
       // 진행 이벤트 발행
       this.emitProgress(executionId, node, 'running', '실행 중...')
 
@@ -157,12 +184,18 @@ export class PipelineExecutionEngine {
       const result = await this.executeTask(node.category, node.taskConfig, adaptedInput, node)
       results.push(result)
 
-      // result_save는 output이 null이어도 성공
       if (result.success) {
         if (result.output) {
           nodeOutputs.set(node.name, result.output)
+        } else if (GATE_CATEGORIES.has(node.category)) {
+          // 게이트 카테고리에서 output null → 조건 미충족 (하위 노드 스킵)
+          gatedNodes.add(node.name)
         }
-        this.emitProgress(executionId, node, 'completed', '완료')
+        // result_save: output null이지만 게이트가 아닌 터미널
+        const msg = GATE_CATEGORIES.has(node.category) && !result.output
+          ? '조건 미충족 (게이트 닫힘)'
+          : '완료'
+        this.emitProgress(executionId, node, 'completed', msg)
       } else {
         failedNodes.add(node.name)
         this.emitProgress(executionId, node, 'failed', result.error || '실행 실패')
@@ -208,6 +241,12 @@ export class PipelineExecutionEngine {
           break
         case 'result_save':
           output = await this.executeResultSave(taskConfig, input)
+          break
+        case 'page_db_check':
+          output = await this.executePageDbCheck(taskConfig, input)
+          break
+        case 'page_db_save':
+          output = await this.executePageDbSave(taskConfig, input)
           break
         default:
           throw new Error(`알 수 없는 Task 카테고리: ${category}`)
@@ -499,6 +538,70 @@ export class PipelineExecutionEngine {
   }
 
   /**
+   * 페이지 방문 체크 태스크: Page → Page | null (게이트)
+   * 조건에 따라 통과하거나 하위 Task 실행을 막는다.
+   */
+  private async executePageDbCheck(
+    config: Record<string, unknown>,
+    input: TaskData
+  ): Promise<TaskData | null> {
+    if (input.type !== 'page') {
+      throw new Error(`PageDbCheckTask는 page 입력이 필요합니다. 받은 타입: ${input.type}`)
+    }
+
+    const page = input.value
+    const pageUrl = page.url()
+    const { domain, path } = PipelineExecutionEngine.parseUrlForVisit(pageUrl)
+    const passCondition = (config.passCondition as string) || 'not_exists'
+
+    const exists = this.checkVisitedPageFn
+      ? this.checkVisitedPageFn(domain, path)
+      : false
+
+    const shouldPass = passCondition === 'exists' ? exists : !exists
+
+    if (shouldPass) {
+      return { type: 'page', value: page }  // 통과: 페이지 그대로 전달
+    }
+
+    return null  // 게이트 닫힘: 하위 Task 스킵
+  }
+
+  /**
+   * 페이지 방문 저장 태스크: Page → Page (pass-through)
+   * 현재 페이지의 도메인/경로를 방문 DB에 저장한다.
+   */
+  private async executePageDbSave(
+    _config: Record<string, unknown>,
+    input: TaskData
+  ): Promise<TaskData> {
+    if (input.type !== 'page') {
+      throw new Error(`PageDbSaveTask는 page 입력이 필요합니다. 받은 타입: ${input.type}`)
+    }
+
+    const page = input.value
+    const pageUrl = page.url()
+    const { domain, path } = PipelineExecutionEngine.parseUrlForVisit(pageUrl)
+
+    if (this.saveVisitedPageFn) {
+      this.saveVisitedPageFn(domain, path)
+    }
+
+    return { type: 'page', value: page }  // pass-through
+  }
+
+  /**
+   * URL에서 도메인과 경로(쿼리/해시 제외)를 추출
+   */
+  private static parseUrlForVisit(url: string): { domain: string; path: string } {
+    const parsed = new URL(url)
+    return {
+      domain: parsed.hostname,
+      path: parsed.pathname
+    }
+  }
+
+  /**
    * ResultStore에서 데이터 읽기 헬퍼
    */
   private readFromResult(index: number | 'all'): TaskData | null {
@@ -634,6 +737,24 @@ export class PipelineExecutionEngine {
     const parentNode = dag.getNode(node.trigger)
     if (parentNode) {
       return this.isAncestorFailed(parentNode, dag, failedNodes)
+    }
+    return false
+  }
+
+  /**
+   * 상위 노드가 게이트에 의해 닫혔는지 확인
+   */
+  private isAncestorGated(
+    node: DAGNode,
+    dag: DAG,
+    gatedNodes: Set<string>
+  ): boolean {
+    if (node.trigger === '_run_' || node.trigger === '_final_') return false
+    if (gatedNodes.has(node.trigger)) return true
+
+    const parentNode = dag.getNode(node.trigger)
+    if (parentNode) {
+      return this.isAncestorGated(parentNode, dag, gatedNodes)
     }
     return false
   }

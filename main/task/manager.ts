@@ -21,7 +21,9 @@ import type {
   StringDbSaveConfig,
   StringDisplayTask,
   StringDisplayConfig,
-  ResultSaveConfig
+  ResultSaveConfig,
+  PageDbCheckConfig,
+  PageDbSaveConfig
 } from './types'
 import { TaskDatabase } from './database'
 
@@ -169,6 +171,17 @@ export class TaskManager {
         }
         break
       }
+      case 'page_db_check': {
+        const config = task.config as PageDbCheckConfig
+        if (!config.passCondition || !['exists', 'not_exists'].includes(config.passCondition)) {
+          errors.push('passCondition은 "exists" 또는 "not_exists"여야 합니다')
+        }
+        break
+      }
+      case 'page_db_save': {
+        // 특별한 검증 없음
+        break
+      }
     }
 
     return { valid: errors.length === 0, errors, warnings }
@@ -191,6 +204,10 @@ export class TaskManager {
         return { label: '' } as StringDisplayConfig
       case 'result_save':
         return { targetIndex: -1 } as ResultSaveConfig
+      case 'page_db_check':
+        return { passCondition: 'not_exists' } as PageDbCheckConfig
+      case 'page_db_save':
+        return {} as PageDbSaveConfig
     }
   }
 

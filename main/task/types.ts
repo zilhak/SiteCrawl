@@ -4,7 +4,7 @@
  */
 
 // Task 카테고리
-export type TaskCategory = 'string_filter' | 'page_navigation' | 'link_extraction' | 'resource_extraction' | 'string_db_save' | 'string_display' | 'result_save'
+export type TaskCategory = 'string_filter' | 'page_navigation' | 'link_extraction' | 'resource_extraction' | 'string_db_save' | 'string_display' | 'result_save' | 'page_db_check' | 'page_db_save'
 
 // 기본 Task 인터페이스
 export interface Task {
@@ -100,11 +100,31 @@ export interface ResultSaveConfig {
   targetIndex: number  // -1이면 append, 0 이상이면 해당 인덱스에 저장
 }
 
+// 8. 페이지 방문 체크 태스크: Page → Page (조건부 게이트)
+export interface PageDbCheckTask extends Task {
+  category: 'page_db_check'
+  config: PageDbCheckConfig
+}
+
+export interface PageDbCheckConfig {
+  passCondition: 'exists' | 'not_exists'  // 저장되었으면 통과 / 저장되지 않았으면 통과
+}
+
+// 9. 페이지 방문 저장 태스크: Page → Page (pass-through)
+export interface PageDbSaveTask extends Task {
+  category: 'page_db_save'
+  config: PageDbSaveConfig
+}
+
+export interface PageDbSaveConfig {
+  // 도메인별 자동 테이블 생성, URL pathname 저장
+}
+
 // Task 유니온 타입
-export type AnyTask = StringFilterTask | PageNavigationTask | LinkExtractionTask | ResourceExtractionTask | StringDbSaveTask | StringDisplayTask | ResultSaveTask
+export type AnyTask = StringFilterTask | PageNavigationTask | LinkExtractionTask | ResourceExtractionTask | StringDbSaveTask | StringDisplayTask | ResultSaveTask | PageDbCheckTask | PageDbSaveTask
 
 // Task Config 유니온 타입
-export type AnyTaskConfig = StringFilterConfig | PageNavigationConfig | LinkExtractionConfig | ResourceExtractionConfig | StringDbSaveConfig | StringDisplayConfig | ResultSaveConfig
+export type AnyTaskConfig = StringFilterConfig | PageNavigationConfig | LinkExtractionConfig | ResourceExtractionConfig | StringDbSaveConfig | StringDisplayConfig | ResultSaveConfig | PageDbCheckConfig | PageDbSaveConfig
 
 // Task 생성 DTO
 export interface CreateTaskDTO {

@@ -363,6 +363,56 @@ export class PipelineDatabase {
     this.db.prepare(`DELETE FROM saved_strings WHERE pipeline_id = ?`).run(pipelineId)
   }
 
+  // ---- 방문 페이지 DB (page_db_check / page_db_save 태스크용) ----
+
+  /**
+   * 도메인명을 테이블명으로 변환
+   * e.g., "example.com" → "visit_example_com"
+   */
+  private sanitizeDomainForTable(domain: string): string {
+    return 'visit_' + domain.replace(/[^a-zA-Z0-9]/g, '_')
+  }
+
+  /**
+   * 도메인별 방문 테이블 생성 (없으면)
+   */
+  private ensureVisitTable(domain: string): string {
+    if (!this.db) throw new Error('Database not initialized')
+
+    const tableName = this.sanitizeDomainForTable(domain)
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS "${tableName}" (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        path TEXT UNIQUE NOT NULL,
+        saved_at INTEGER NOT NULL
+      )
+    `)
+    return tableName
+  }
+
+  /**
+   * 페이지 방문 여부 확인
+   */
+  checkVisitedPage(domain: string, path: string): boolean {
+    if (!this.db) return false
+
+    const tableName = this.ensureVisitTable(domain)
+    const row = this.db.prepare(`SELECT 1 FROM "${tableName}" WHERE path = ?`).get(path)
+    return !!row
+  }
+
+  /**
+   * 페이지 방문 기록 저장
+   */
+  saveVisitedPage(domain: string, path: string): void {
+    if (!this.db) return
+
+    const tableName = this.ensureVisitTable(domain)
+    this.db.prepare(`
+      INSERT OR IGNORE INTO "${tableName}" (path, saved_at) VALUES (?, ?)
+    `).run(path, Date.now())
+  }
+
   /**
    * 데이터베이스 활성화 여부
    */

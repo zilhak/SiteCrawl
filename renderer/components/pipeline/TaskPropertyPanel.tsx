@@ -67,6 +67,10 @@ function getDefaultConfig(category: TaskCategory): Record<string, unknown> {
       return { label: '' }
     case 'result_save':
       return { targetIndex: -1 }
+    case 'page_db_check':
+      return { passCondition: 'not_exists' }
+    case 'page_db_save':
+      return {}
   }
 }
 
@@ -288,6 +292,17 @@ export default function TaskPropertyPanel({
                     config={config}
                     onChange={handleConfigChange}
                   />
+                )}
+
+                {category === 'page_db_check' && (
+                  <PageDbCheckConfigForm
+                    config={config}
+                    onChange={handleConfigChange}
+                  />
+                )}
+
+                {category === 'page_db_save' && (
+                  <PageDbSaveConfigForm />
                 )}
               </Box>
             </>
@@ -641,6 +656,39 @@ function ResultSaveConfigForm({ config, onChange }: ConfigProps) {
         size="small"
         fullWidth
       />
+    </Stack>
+  )
+}
+
+function PageDbCheckConfigForm({ config, onChange }: ConfigProps) {
+  return (
+    <Stack spacing={2}>
+      <Alert severity="info" variant="outlined" sx={{ fontSize: '12px' }}>
+        페이지 URL의 도메인별 방문 기록을 확인합니다.
+        조건이 충족되면 페이지를 통과시키고, 아니면 하위 Task를 건너뜁니다.
+      </Alert>
+      <FormControl fullWidth size="small">
+        <InputLabel>통과 조건</InputLabel>
+        <Select
+          value={(config.passCondition as string) || 'not_exists'}
+          label="통과 조건"
+          onChange={(e) => onChange('passCondition', e.target.value)}
+        >
+          <MenuItem value="not_exists">방문하지 않은 페이지만 통과</MenuItem>
+          <MenuItem value="exists">방문했던 페이지만 통과</MenuItem>
+        </Select>
+      </FormControl>
+    </Stack>
+  )
+}
+
+function PageDbSaveConfigForm() {
+  return (
+    <Stack spacing={2}>
+      <Alert severity="info" variant="outlined" sx={{ fontSize: '12px' }}>
+        현재 페이지의 URL을 도메인별 방문 기록 DB에 저장합니다.
+        경로만 저장되며 (쿼리/해시 제외), 도메인별로 테이블이 자동 생성됩니다.
+      </Alert>
     </Stack>
   )
 }

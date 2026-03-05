@@ -28,7 +28,7 @@ export interface CrawlHistory {
 }
 
 // Task
-export type TaskCategory = 'string_filter' | 'page_navigation' | 'link_extraction' | 'resource_extraction' | 'string_db_save' | 'string_display' | 'result_save'
+export type TaskCategory = 'string_filter' | 'page_navigation' | 'link_extraction' | 'resource_extraction' | 'string_db_save' | 'string_display' | 'result_save' | 'page_db_check' | 'page_db_save'
 
 export interface Task {
   id: string

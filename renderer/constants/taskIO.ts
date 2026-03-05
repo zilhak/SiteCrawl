@@ -12,7 +12,9 @@ export const TASK_IO_MAP: Record<TaskCategory, { input: string; output: string }
   resource_extraction: { input: 'urls', output: 'urls' },
   string_db_save: { input: 'strings', output: 'strings' },
   string_display: { input: 'strings', output: 'strings' },
-  result_save: { input: 'strings', output: 'none' }
+  result_save: { input: 'strings', output: 'none' },
+  page_db_check: { input: 'page', output: 'page' },
+  page_db_save: { input: 'page', output: 'page' }
 }
 
 export const CATEGORY_LABELS: Record<TaskCategory, string> = {
@@ -22,7 +24,9 @@ export const CATEGORY_LABELS: Record<TaskCategory, string> = {
   resource_extraction: '리소스 추출',
   string_db_save: 'DB 저장',
   string_display: '화면 표시',
-  result_save: 'Result 저장'
+  result_save: 'Result 저장',
+  page_db_check: '방문 체크',
+  page_db_save: '방문 저장'
 }
 
 export const CATEGORY_COLORS: Record<TaskCategory, 'warning' | 'info' | 'success' | 'secondary' | 'error'> = {
@@ -32,7 +36,9 @@ export const CATEGORY_COLORS: Record<TaskCategory, 'warning' | 'info' | 'success
   resource_extraction: 'secondary',
   string_db_save: 'warning',
   string_display: 'info',
-  result_save: 'success'
+  result_save: 'success',
+  page_db_check: 'error',
+  page_db_save: 'secondary'
 }
 
 export const IO_TYPE_LABELS: Record<string, string> = {

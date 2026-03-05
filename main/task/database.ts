@@ -32,7 +32,7 @@ export class TaskDatabase {
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
         description TEXT,
-        category TEXT NOT NULL CHECK(category IN ('string_filter', 'page_navigation', 'link_extraction', 'resource_extraction', 'string_db_save', 'string_display', 'result_save')),
+        category TEXT NOT NULL CHECK(category IN ('string_filter', 'page_navigation', 'link_extraction', 'resource_extraction', 'string_db_save', 'string_display', 'result_save', 'page_db_check', 'page_db_save')),
         config TEXT NOT NULL,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL

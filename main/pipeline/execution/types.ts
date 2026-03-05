@@ -23,7 +23,9 @@ export const TASK_IO_MAP = {
   resource_extraction: { input: 'urls', output: 'urls' },
   string_db_save: { input: 'strings', output: 'strings' },
   string_display: { input: 'strings', output: 'strings' },
-  result_save: { input: 'strings', output: 'none' }
+  result_save: { input: 'strings', output: 'none' },
+  page_db_check: { input: 'page', output: 'page' },
+  page_db_save: { input: 'page', output: 'page' }
 } as const
 
 // 노드 실행 결과
