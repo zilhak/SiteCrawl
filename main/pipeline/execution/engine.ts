@@ -1,14 +1,14 @@
 /**
  * Pipeline 실행 엔진
  *
- * DAG 위상 정렬 순서로 Task를 실행하고,
+ * 트리 위상 정렬 순서로 Task를 실행하고,
  * Task 간 데이터를 불변 원칙에 따라 전달한다.
  */
 
 import { chromium, Browser, BrowserContext, Page } from 'playwright'
 import type { Pipeline } from '../types'
-import type { DAGNode } from '../types'
-import { DAG } from '../dag'
+import type { TreeNode } from '../types'
+import { PipelineTree } from '../dag'
 import { PipelineValidator } from '../validator'
 import type { PipelineTaskCategory } from '../types'
 import type {
@@ -82,14 +82,14 @@ export class PipelineExecutionEngine {
       const initialPage = await this.executeInitialNavigation(initialUrl)
 
       // 4. Process 구간 실행
-      const processDAG = DAG.fromPipeline(pipeline, 'process')
-      const processResult = await this.executePhase(processDAG, initialPage, executionId)
+      const processTree = PipelineTree.fromPipeline(pipeline, 'process')
+      const processResult = await this.executePhase(processTree, initialPage, executionId)
       results.push(...processResult.results)
 
       // 5. Final 구간 실행 (Process 완료 후)
-      const finalDAG = DAG.fromPipeline(pipeline, 'final')
-      if (finalDAG.getRoot()) {
-        const finalResult = await this.executePhase(finalDAG, initialPage, executionId)
+      const finalTree = PipelineTree.fromPipeline(pipeline, 'final')
+      if (finalTree.getRoot()) {
+        const finalResult = await this.executePhase(finalTree, initialPage, executionId)
         results.push(...finalResult.results)
       }
 
@@ -125,7 +125,7 @@ export class PipelineExecutionEngine {
    * 단일 구간(phase) 실행
    */
   private async executePhase(
-    dag: DAG,
+    tree: PipelineTree,
     initialPage: Page,
     executionId: string
   ): Promise<{ results: NodeExecutionResult[], nodeOutputs: Map<string, TaskData> }> {
@@ -133,14 +133,14 @@ export class PipelineExecutionEngine {
     const nodeOutputs = new Map<string, TaskData>()
     const failedNodes = new Set<string>()
     const gatedNodes = new Set<string>()
-    const executionOrder = dag.topologicalSort()
+    const executionOrder = tree.topologicalSort()
 
     // 게이트 카테고리: output이 null이면 하위 노드 스킵
     const GATE_CATEGORIES = new Set(['page_db_check'])
 
     for (const node of executionOrder) {
       // 부모가 실패했으면 이 노드도 스킵
-      if (this.isAncestorFailed(node, dag, failedNodes)) {
+      if (this.isAncestorFailed(node, tree, failedNodes)) {
         failedNodes.add(node.name)
         results.push({
           taskName: node.name,
@@ -155,7 +155,7 @@ export class PipelineExecutionEngine {
       }
 
       // 부모가 게이트로 닫혔으면 이 노드도 스킵 (실패는 아님)
-      if (this.isAncestorGated(node, dag, gatedNodes)) {
+      if (this.isAncestorGated(node, tree, gatedNodes)) {
         gatedNodes.add(node.name)
         results.push({
           taskName: node.name,
@@ -212,7 +212,7 @@ export class PipelineExecutionEngine {
     category: PipelineTaskCategory,
     taskConfig: Record<string, unknown>,
     input: TaskData,
-    node: DAGNode
+    node: TreeNode
   ): Promise<NodeExecutionResult> {
     const startedAt = Date.now()
     const taskId = node.taskId || node.name
@@ -626,7 +626,7 @@ export class PipelineExecutionEngine {
    * 부모 노드의 출력 가져오기
    */
   private getParentOutput(
-    node: DAGNode,
+    node: TreeNode,
     nodeOutputs: Map<string, TaskData>,
     initialPage: Page
   ): TaskData {
@@ -726,17 +726,17 @@ export class PipelineExecutionEngine {
    * 상위 노드가 실패했는지 확인
    */
   private isAncestorFailed(
-    node: DAGNode,
-    dag: DAG,
+    node: TreeNode,
+    tree: PipelineTree,
     failedNodes: Set<string>
   ): boolean {
     if (node.trigger === '_run_' || node.trigger === '_final_') return false
     if (failedNodes.has(node.trigger)) return true
 
     // 부모의 부모도 재귀적으로 확인
-    const parentNode = dag.getNode(node.trigger)
+    const parentNode = tree.getNode(node.trigger)
     if (parentNode) {
-      return this.isAncestorFailed(parentNode, dag, failedNodes)
+      return this.isAncestorFailed(parentNode, tree, failedNodes)
     }
     return false
   }
@@ -745,16 +745,16 @@ export class PipelineExecutionEngine {
    * 상위 노드가 게이트에 의해 닫혔는지 확인
    */
   private isAncestorGated(
-    node: DAGNode,
-    dag: DAG,
+    node: TreeNode,
+    tree: PipelineTree,
     gatedNodes: Set<string>
   ): boolean {
     if (node.trigger === '_run_' || node.trigger === '_final_') return false
     if (gatedNodes.has(node.trigger)) return true
 
-    const parentNode = dag.getNode(node.trigger)
+    const parentNode = tree.getNode(node.trigger)
     if (parentNode) {
-      return this.isAncestorGated(parentNode, dag, gatedNodes)
+      return this.isAncestorGated(parentNode, tree, gatedNodes)
     }
     return false
   }
@@ -900,7 +900,7 @@ export class PipelineExecutionEngine {
    */
   private emitProgress(
     executionId: string,
-    node: DAGNode,
+    node: TreeNode,
     status: 'running' | 'completed' | 'failed',
     message: string
   ): void {

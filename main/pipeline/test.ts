@@ -3,7 +3,7 @@
  */
 
 import { Pipeline, PipelineTask } from './types'
-import { DAG } from './dag'
+import { PipelineTree } from './dag'
 import { PipelineValidator } from './validator'
 
 // 테스트 헬퍼: 간단한 PipelineTask 생성
@@ -24,10 +24,10 @@ export function runPipelineTests() {
 
   testSimpleChain()
   testBranching()
-  testComplexDAG()
+  testComplexTree()
   testCycleDetection()
   testValidation()
-  testDAGOperations()
+  testTreeOperations()
 
   console.log('\n========== All Tests Completed ==========')
 }
@@ -50,12 +50,12 @@ function testSimpleChain() {
     updatedAt: Date.now()
   }
 
-  const dag = DAG.fromPipeline(pipeline)
+  const tree =PipelineTree.fromPipeline(pipeline)
   const validator = new PipelineValidator()
   const result = validator.validate(pipeline)
 
-  console.log('  DAG Structure:')
-  console.log(dag.toString().split('\n').map(l => '    ' + l).join('\n'))
+  console.log('  Tree Structure:')
+  console.log(tree.toString().split('\n').map(l => '    ' + l).join('\n'))
   console.log(`  Validation: ${result.valid ? '✅ PASS' : '❌ FAIL'}`)
   if (result.errors.length > 0) {
     console.log(`  Errors: ${result.errors.join(', ')}`)
@@ -82,29 +82,29 @@ function testBranching() {
     updatedAt: Date.now()
   }
 
-  const dag = DAG.fromPipeline(pipeline)
+  const tree =PipelineTree.fromPipeline(pipeline)
   const validator = new PipelineValidator()
   const result = validator.validate(pipeline)
 
-  console.log('  DAG Structure:')
-  console.log(dag.toString().split('\n').map(l => '    ' + l).join('\n'))
+  console.log('  Tree Structure:')
+  console.log(tree.toString().split('\n').map(l => '    ' + l).join('\n'))
   console.log(`  Validation: ${result.valid ? '✅ PASS' : '❌ FAIL'}`)
 
   // 리프 노드 확인
-  const leafNodes = dag.getLeafNodes()
+  const leafNodes = tree.getLeafNodes()
   console.log(`  Leaf Nodes: ${leafNodes.map(n => n.name).join(', ')}`)
   console.log()
 }
 
 /**
- * 테스트 3: 복잡한 DAG
+ * 테스트 3: 복잡한 트리
  */
-function testComplexDAG() {
-  console.log('Test 3: Complex DAG')
+function testComplexTree() {
+  console.log('Test 3: Complex Tree')
 
   const pipeline: Pipeline = {
     id: 'p3',
-    name: 'Complex DAG',
+    name: 'Complex Tree',
     tasks: [
       makeTask('navigate', '_run_', 'page_navigation', { waitUntil: 'domcontentloaded' }),
       makeTask('extract_all', 'navigate', 'link_extraction', { includeHrefLinks: true, includeTextUrls: true }),
@@ -117,16 +117,16 @@ function testComplexDAG() {
     updatedAt: Date.now()
   }
 
-  const dag = DAG.fromPipeline(pipeline)
+  const tree =PipelineTree.fromPipeline(pipeline)
   const validator = new PipelineValidator()
   const result = validator.validate(pipeline)
 
-  console.log('  DAG Structure:')
-  console.log(dag.toString().split('\n').map(l => '    ' + l).join('\n'))
+  console.log('  Tree Structure:')
+  console.log(tree.toString().split('\n').map(l => '    ' + l).join('\n'))
   console.log(`  Validation: ${result.valid ? '✅ PASS' : '❌ FAIL'}`)
 
   // 위상 정렬
-  const sorted = dag.topologicalSort()
+  const sorted = tree.topologicalSort()
   console.log(`  Topological Order: ${sorted.map(n => n.name).join(' → ')}`)
   console.log()
 }
@@ -158,10 +158,10 @@ function testCycleDetection() {
   // 순환 만들기: back_to_b의 trigger를 'b'로 설정하여 b → ... → cycle → back_to_b → b 순환
   pipeline.tasks.push(makeTask('back_to_b', 'b', 'string_filter'))
 
-  const dag = DAG.fromPipeline(pipeline)
+  const tree =PipelineTree.fromPipeline(pipeline)
   const validator = new PipelineValidator()
   const result = validator.validate(pipeline)
-  const hasCycle = dag.hasCycle()
+  const hasCycle = tree.hasCycle()
 
   console.log(`  Has Cycle: ${hasCycle ? '✅ Detected' : '❌ Not Detected'}`)
   console.log(`  Validation: ${result.valid ? '❌ PASS (should fail)' : '✅ FAIL (expected)'}`)
@@ -231,14 +231,14 @@ function testValidation() {
 }
 
 /**
- * 테스트 6: DAG 연산
+ * 테스트 6: 트리 연산
  */
-function testDAGOperations() {
-  console.log('Test 6: DAG Operations')
+function testTreeOperations() {
+  console.log('Test 6: Tree Operations')
 
   const pipeline: Pipeline = {
     id: 'p6',
-    name: 'DAG Ops',
+    name: 'Tree Ops',
     tasks: [
       makeTask('root', '_run_', 'page_navigation'),
       makeTask('a', 'root', 'link_extraction'),
@@ -251,20 +251,20 @@ function testDAGOperations() {
     updatedAt: Date.now()
   }
 
-  const dag = DAG.fromPipeline(pipeline)
+  const tree =PipelineTree.fromPipeline(pipeline)
 
   // Ancestors
-  const nodeC = dag.getNode('c')!
-  const ancestors = dag.getAncestors(nodeC)
+  const nodeC = tree.getNode('c')!
+  const ancestors = tree.getAncestors(nodeC)
   console.log(`  Ancestors of 'c': ${Array.from(ancestors).join(', ')}`)
 
   // Descendants
-  const nodeRoot = dag.getNode('root')!
-  const descendants = dag.getDescendants(nodeRoot)
+  const nodeRoot = tree.getNode('root')!
+  const descendants = tree.getDescendants(nodeRoot)
   console.log(`  Descendants of 'root': ${Array.from(descendants).join(', ')}`)
 
   // Reachable
-  const reachable = dag.getReachableNodes(nodeRoot)
+  const reachable = tree.getReachableNodes(nodeRoot)
   console.log(`  Reachable from 'root': ${Array.from(reachable).join(', ')}`)
 
   console.log()

@@ -3,7 +3,7 @@
  */
 
 import { Pipeline, PipelineTask, ValidationResult } from './types'
-import { DAG } from './dag'
+import { PipelineTree } from './dag'
 import { PipelineValidator } from './validator'
 import { PipelineDatabase } from './database'
 
@@ -195,16 +195,16 @@ export class PipelineManager {
   }
 
   /**
-   * Pipeline을 DAG로 변환
+   * Pipeline을 트리로 변환
    */
-  getPipelineAsDAG(pipelineId: string): DAG | null {
+  getPipelineAsTree(pipelineId: string): PipelineTree | null {
     const pipeline = this.getPipeline(pipelineId)
     if (!pipeline) return null
 
     try {
-      return DAG.fromPipeline(pipeline)
+      return PipelineTree.fromPipeline(pipeline)
     } catch (error) {
-      console.error('Failed to create DAG:', error)
+      console.error('Failed to create tree:', error)
       return null
     }
   }
@@ -254,12 +254,12 @@ export class PipelineManager {
     leafNodes: number
     maxDepth: number
   } | null {
-    const dag = this.getPipelineAsDAG(pipelineId)
-    if (!dag) return null
+    const tree = this.getPipelineAsTree(pipelineId)
+    if (!tree) return null
 
-    const nodes = dag.getAllNodes()
-    const leafNodes = dag.getLeafNodes()
-    const root = dag.getRoot()
+    const nodes = tree.getAllNodes()
+    const leafNodes = tree.getLeafNodes()
+    const root = tree.getRoot()
 
     // 최대 깊이 계산 (DFS)
     let maxDepth = 0

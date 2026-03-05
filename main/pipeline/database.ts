@@ -39,7 +39,7 @@ export class PipelineDatabase {
       }
     } catch { /* 테이블이 아예 없는 경우 무시 */ }
 
-    // Pipeline Tasks 테이블 (DAG 구조) - JSON이 본체
+    // Pipeline Tasks 테이블 (트리 구조) - JSON이 본체
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS pipeline_tasks (
         id INTEGER PRIMARY KEY AUTOINCREMENT,

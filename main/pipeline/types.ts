@@ -5,7 +5,7 @@
 // Task 카테고리 (pipeline 내에서도 사용)
 export type PipelineTaskCategory = 'string_filter' | 'page_navigation' | 'link_extraction' | 'resource_extraction' | 'string_db_save' | 'string_display' | 'result_save' | 'page_db_check' | 'page_db_save'
 
-// Pipeline Task (DAG 노드) - JSON이 본체, Task 설정을 인라인으로 포함
+// Pipeline Task (트리 노드) - JSON이 본체, Task 설정을 인라인으로 포함
 export interface PipelineTask {
   name: string                    // Pipeline 내 고유 이름 (다른 Task가 참조)
   trigger: string                 // 실행 조건: '_run_' | '_final_' 또는 다른 Task의 name
@@ -63,20 +63,20 @@ export interface ExecutionResult {
   completedAt?: number
 }
 
-// DAG 노드
-export interface DAGNode {
+// 트리 노드
+export interface TreeNode {
   name: string
   category: PipelineTaskCategory
   taskConfig: Record<string, unknown>
   trigger: string
   taskId?: string
   phase?: 'process' | 'final'
-  children: DAGNode[]
-  parents: DAGNode[]
+  children: TreeNode[]
+  parent: TreeNode | null  // 부모는 항상 하나 (트리 구조)
 }
 
-// DAG 그래프
-export interface DAGGraph {
-  nodes: Map<string, DAGNode>
-  root: DAGNode | null
+// 트리 그래프
+export interface TreeGraph {
+  nodes: Map<string, TreeNode>
+  root: TreeNode | null
 }

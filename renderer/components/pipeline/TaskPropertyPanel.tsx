@@ -21,9 +21,6 @@ import {
   Divider
 } from '@mui/material'
 import CloseIcon from '@mui/icons-material/Close'
-import CheckCircleIcon from '@mui/icons-material/CheckCircle'
-import WarningIcon from '@mui/icons-material/Warning'
-import HelpOutlineIcon from '@mui/icons-material/HelpOutline'
 import AddIcon from '@mui/icons-material/Add'
 import type { TaskCategory } from '../../types'
 import { TASK_IO_MAP, CATEGORY_LABELS, CATEGORY_COLORS, IO_TYPE_LABELS } from '../../constants/taskIO'
@@ -38,6 +35,7 @@ interface TaskPropertyPanelProps {
   data: TaskPropertyData
   parentCategory?: TaskCategory
   isParentRoot?: boolean
+  isFinalRoot?: boolean
   isReadOnly?: boolean
   onUpdate: (updates: Partial<TaskPropertyData>) => void
   onClose: () => void
@@ -74,32 +72,52 @@ function getDefaultConfig(category: TaskCategory): Record<string, unknown> {
   }
 }
 
-// IO 호환성 체크 (urls → strings 단방향 상속)
+// IO 호환성 체크 (엔진의 adaptInput이 지원하는 모든 변환 포함)
 function isIOCompatible(output: string, input: string): boolean {
   if (output === input) return true
+  // urls ↔ strings: 상호 변환 가능
   if (output === 'urls' && input === 'strings') return true
+  if (output === 'strings' && input === 'urls') return true
+  // url → 배열 타입
   if (output === 'url' && (input === 'strings' || input === 'urls')) return true
+  // 배열 타입 → url (첫 번째 요소 사용)
+  if ((output === 'urls' || output === 'strings') && input === 'url') return true
+  // empty → page 제외 모두 (Final 구간)
+  if (output === 'empty' && input !== 'page') return true
   return false
 }
 
-function getIOCompatibility(
+// 부모 출력에 맞는 호환 카테고리 목록 반환
+function getCompatibleCategories(parentOutput: string): TaskCategory[] {
+  return (Object.keys(TASK_IO_MAP) as TaskCategory[]).filter(cat => {
+    const catIO = TASK_IO_MAP[cat]
+    if (catIO.output === 'none') {
+      // 터미널 노드 (result_save)도 입력이 맞으면 선택 가능
+    }
+    return isIOCompatible(parentOutput, catIO.input)
+  })
+}
+
+// 부모 출력 타입 계산
+function getParentOutputType(
   parentCategory: TaskCategory | undefined,
   isParentRoot: boolean,
-  currentCategory: TaskCategory | undefined
-): 'compatible' | 'incompatible' | 'unknown' {
-  if (!currentCategory) return 'unknown'
-
-  const parentOutput = isParentRoot ? 'page' : parentCategory ? TASK_IO_MAP[parentCategory].output : null
-  if (!parentOutput) return 'unknown'
-
-  const currentInput = TASK_IO_MAP[currentCategory].input
-  return isIOCompatible(parentOutput, currentInput) ? 'compatible' : 'incompatible'
+  isFinalRoot?: boolean
+): string | null {
+  if (isParentRoot) {
+    return isFinalRoot ? 'empty' : 'page'
+  }
+  if (parentCategory) {
+    return TASK_IO_MAP[parentCategory].output
+  }
+  return null
 }
 
 export default function TaskPropertyPanel({
   data,
   parentCategory,
   isParentRoot,
+  isFinalRoot,
   isReadOnly,
   onUpdate,
   onClose
@@ -107,6 +125,10 @@ export default function TaskPropertyPanel({
   // 로컬 상태 없음 - props에서 직접 읽고, 변경 시 즉시 onUpdate 호출
   const category = data.taskCategory
   const config = data.taskConfig || (category ? getDefaultConfig(category) : {})
+
+  // 부모 출력 타입 → 호환 카테고리 필터링
+  const parentOutput = getParentOutputType(parentCategory, !!isParentRoot, isFinalRoot)
+  const compatibleCategories = parentOutput ? getCompatibleCategories(parentOutput) : Object.keys(TASK_IO_MAP) as TaskCategory[]
 
   const handleNameChange = (newName: string) => {
     onUpdate({ taskName: newName })
@@ -124,10 +146,6 @@ export default function TaskPropertyPanel({
       taskConfig: { ...config, [key]: value }
     })
   }
-
-  const compatibility = getIOCompatibility(parentCategory, !!isParentRoot, category)
-  const parentOutput = isParentRoot ? 'page' : parentCategory ? TASK_IO_MAP[parentCategory].output : null
-  const currentInput = category ? TASK_IO_MAP[category].input : null
 
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -174,55 +192,24 @@ export default function TaskPropertyPanel({
             onChange={(e) => handleNameChange(e.target.value)}
           />
 
-          {/* IO 호환성 표시 */}
+          {/* 데이터 흐름 표시 */}
           {parentOutput && (
             <Box>
               <Typography variant="caption" color="text.secondary" gutterBottom display="block">
-                데이터 흐름
+                부모 출력: {IO_TYPE_LABELS[parentOutput] || parentOutput}
               </Typography>
-              <Stack direction="row" spacing={1} alignItems="center">
-                <Chip
-                  label={`← ${IO_TYPE_LABELS[parentOutput] || parentOutput}`}
-                  size="small"
-                  variant="outlined"
-                />
-                <Typography variant="body2">→</Typography>
-                {currentInput ? (
-                  <Chip
-                    label={IO_TYPE_LABELS[currentInput] || currentInput}
-                    size="small"
-                    variant="outlined"
-                  />
-                ) : (
-                  <Chip label="미설정" size="small" variant="outlined" color="default" />
-                )}
-                {compatibility === 'compatible' && (
-                  <CheckCircleIcon color="success" sx={{ fontSize: 18 }} />
-                )}
-                {compatibility === 'incompatible' && (
-                  <WarningIcon color="warning" sx={{ fontSize: 18 }} />
-                )}
-                {compatibility === 'unknown' && (
-                  <HelpOutlineIcon color="disabled" sx={{ fontSize: 18 }} />
-                )}
-              </Stack>
-              {compatibility === 'incompatible' && (
-                <Alert severity="warning" sx={{ mt: 1 }} variant="outlined">
-                  입출력 타입이 일치하지 않습니다. 실행 시 자동 변환을 시도합니다.
-                </Alert>
-              )}
             </Box>
           )}
 
           <Divider />
 
-          {/* 카테고리 선택 */}
+          {/* 카테고리 선택 (부모 output에 맞는 것만 표시) */}
           <Box>
             <Typography variant="subtitle2" gutterBottom>
               Task 카테고리
             </Typography>
             <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-              {(Object.keys(CATEGORY_LABELS) as TaskCategory[]).map((cat) => (
+              {compatibleCategories.map((cat) => (
                 <Chip
                   key={cat}
                   label={CATEGORY_LABELS[cat]}
@@ -546,7 +533,7 @@ function ResultSourceSelect({ config, onChange }: ConfigProps) {
             else onChange('resultIndex', 0)
           }}
         >
-          <MenuItem value="none">없음 (DAG 입력 사용)</MenuItem>
+          <MenuItem value="none">없음 (트리 입력 사용)</MenuItem>
           <MenuItem value="index">Result 인덱스 지정</MenuItem>
           <MenuItem value="all">Result 전체</MenuItem>
         </Select>

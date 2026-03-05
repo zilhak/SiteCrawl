@@ -1,5 +1,5 @@
 /**
- * Pipeline DAG 커스텀 노드 컴포넌트
+ * Pipeline 트리 커스텀 노드 컴포넌트
  */
 
 import { useState } from 'react'

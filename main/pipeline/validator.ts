@@ -3,7 +3,7 @@
  */
 
 import { Pipeline, PipelineTask, ValidationResult } from './types'
-import { DAG } from './dag'
+import { PipelineTree } from './dag'
 
 export class PipelineValidator {
   /**
@@ -69,17 +69,17 @@ export class PipelineValidator {
       }
     }
 
-    // 5. DAG 생성 및 순환 참조 검증
+    // 5. 트리 생성 및 순환 참조 검증
     if (errors.length === 0) {
       try {
-        const dag = DAG.fromPipeline(pipeline)
+        const tree = PipelineTree.fromPipeline(pipeline)
 
-        if (dag.hasCycle()) {
-          errors.push('순환 참조가 감지되었습니다. Pipeline은 DAG 구조여야 합니다')
+        if (tree.hasCycle()) {
+          errors.push('순환 참조가 감지되었습니다. Pipeline은 트리 구조여야 합니다')
         }
 
         // 6. 도달 불가능한 노드 검증
-        const unreachable = dag.getUnreachableNodes()
+        const unreachable = tree.getUnreachableNodes()
         if (unreachable.length > 0) {
           const names = unreachable.map(n => n.name).join(', ')
           errors.push(`Root에서 도달할 수 없는 Task: ${names}`)
@@ -87,11 +87,11 @@ export class PipelineValidator {
 
         // 7. 고립된 노드 경고 (부모도 자식도 없는 노드)
         const isolated = pipeline.tasks.filter(task => {
-          const node = dag.getNode(task.name)
+          const node = tree.getNode(task.name)
           if (!node) return false
           return task.trigger !== '_run_' &&
                  task.trigger !== '_final_' &&
-                 node.parents.length === 0 &&
+                 node.parent === null &&
                  node.children.length === 0
         })
 
@@ -101,7 +101,7 @@ export class PipelineValidator {
         }
 
       } catch (error) {
-        errors.push(`DAG 생성 실패: ${error instanceof Error ? error.message : 'Unknown error'}`)
+        errors.push(`트리 생성 실패: ${error instanceof Error ? error.message : 'Unknown error'}`)
       }
     }
 
@@ -186,8 +186,8 @@ export class PipelineValidator {
     }
 
     try {
-      const dag = DAG.fromPipeline(testPipeline)
-      if (dag.hasCycle()) {
+      const tree = PipelineTree.fromPipeline(testPipeline)
+      if (tree.hasCycle()) {
         errors.push('이 Task를 추가하면 순환 참조가 발생합니다')
       }
     } catch (error) {
@@ -268,8 +268,8 @@ export class PipelineValidator {
     }
 
     try {
-      const dag = DAG.fromPipeline(testPipeline)
-      if (dag.hasCycle()) {
+      const tree = PipelineTree.fromPipeline(testPipeline)
+      if (tree.hasCycle()) {
         errors.push('Trigger를 변경하면 순환 참조가 발생합니다')
       }
     } catch (error) {

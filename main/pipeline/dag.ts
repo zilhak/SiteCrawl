@@ -1,12 +1,13 @@
 /**
- * DAG (Directed Acyclic Graph) 자료구조
+ * Pipeline Tree 자료구조
+ * 각 노드는 부모가 최대 하나인 트리 구조
  */
 
-import { Pipeline, PipelineTask, DAGNode, DAGGraph } from './types'
+import { Pipeline, PipelineTask, TreeNode, TreeGraph } from './types'
 
-export class DAG {
-  private nodes: Map<string, DAGNode>
-  private root: DAGNode | null
+export class PipelineTree {
+  private nodes: Map<string, TreeNode>
+  private root: TreeNode | null
 
   constructor() {
     this.nodes = new Map()
@@ -14,11 +15,11 @@ export class DAG {
   }
 
   /**
-   * Pipeline으로부터 DAG 생성
+   * Pipeline으로부터 Tree 생성
    * @param phase 지정 시 해당 phase의 task만 포함. 미지정 시 모든 task 포함 (하위호환)
    */
-  static fromPipeline(pipeline: Pipeline, phase?: 'process' | 'final'): DAG {
-    const dag = new DAG()
+  static fromPipeline(pipeline: Pipeline, phase?: 'process' | 'final'): PipelineTree {
+    const tree = new PipelineTree()
 
     // phase 필터링: 지정된 경우 해당 phase의 task만 처리
     const filteredTasks = phase === undefined
@@ -32,7 +33,7 @@ export class DAG {
 
     // 1. 필터링된 노드 생성
     for (const task of filteredTasks) {
-      const node: DAGNode = {
+      const node: TreeNode = {
         name: task.name,
         category: task.category,
         taskConfig: task.taskConfig,
@@ -40,88 +41,80 @@ export class DAG {
         taskId: task.taskId,
         phase: task.phase || 'process',
         children: [],
-        parents: []
+        parent: null
       }
-      dag.nodes.set(task.name, node)
+      tree.nodes.set(task.name, node)
 
       // root 노드 찾기
       if (task.trigger === rootTrigger) {
-        dag.root = node
+        tree.root = node
       }
     }
 
-    // 2. 간선 연결 (부모-자식 관계)
+    // 2. 간선 연결 (부모-자식 관계, 트리: 부모는 하나)
     for (const task of filteredTasks) {
       if (task.trigger === '_run_' || task.trigger === '_final_') continue
 
-      const childNode = dag.nodes.get(task.name)
-      const parentNode = dag.nodes.get(task.trigger)
+      const childNode = tree.nodes.get(task.name)
+      const parentNode = tree.nodes.get(task.trigger)
 
       if (childNode && parentNode) {
         parentNode.children.push(childNode)
-        childNode.parents.push(parentNode)
+        childNode.parent = parentNode
       }
     }
 
-    return dag
+    return tree
   }
 
   /**
    * 루트 노드 반환
    */
-  getRoot(): DAGNode | null {
+  getRoot(): TreeNode | null {
     return this.root
   }
 
   /**
    * 특정 노드 반환
    */
-  getNode(name: string): DAGNode | null {
+  getNode(name: string): TreeNode | null {
     return this.nodes.get(name) || null
   }
 
   /**
    * 모든 노드 반환
    */
-  getAllNodes(): DAGNode[] {
+  getAllNodes(): TreeNode[] {
     return Array.from(this.nodes.values())
   }
 
   /**
    * 리프 노드들 반환 (자식이 없는 노드들)
    */
-  getLeafNodes(): DAGNode[] {
+  getLeafNodes(): TreeNode[] {
     return this.getAllNodes().filter(node => node.children.length === 0)
   }
 
   /**
    * 위상 정렬 (Topological Sort)
-   * DFS 기반으로 실행 순서 결정
+   * BFS 기반으로 레벨 순서 탐색 (트리이므로 단순 BFS가 위상 정렬)
    */
-  topologicalSort(): DAGNode[] {
-    const visited = new Set<string>()
-    const result: DAGNode[] = []
+  topologicalSort(): TreeNode[] {
+    if (!this.root) return []
 
-    const dfs = (node: DAGNode) => {
-      if (visited.has(node.name)) return
+    const result: TreeNode[] = []
+    const queue: TreeNode[] = [this.root]
 
-      visited.add(node.name)
-
-      // 자식 노드들 먼저 방문
-      for (const child of node.children) {
-        dfs(child)
-      }
-
-      // 후위 순회로 결과에 추가
+    while (queue.length > 0) {
+      const node = queue.shift()!
       result.push(node)
+
+      for (const child of node.children) {
+        queue.push(child)
+      }
     }
 
-    if (this.root) {
-      dfs(this.root)
-    }
-
-    // 역순으로 반환 (root가 먼저 오도록)
-    return result.reverse()
+    return result
   }
 
   /**
@@ -131,7 +124,7 @@ export class DAG {
     const visited = new Set<string>()
     const recursionStack = new Set<string>()
 
-    const dfs = (node: DAGNode): boolean => {
+    const dfs = (node: TreeNode): boolean => {
       visited.add(node.name)
       recursionStack.add(node.name)
 
@@ -159,9 +152,9 @@ export class DAG {
   /**
    * 특정 노드에서 도달 가능한 모든 노드 찾기 (BFS)
    */
-  getReachableNodes(startNode: DAGNode): Set<string> {
+  getReachableNodes(startNode: TreeNode): Set<string> {
     const reachable = new Set<string>()
-    const queue: DAGNode[] = [startNode]
+    const queue: TreeNode[] = [startNode]
 
     while (queue.length > 0) {
       const node = queue.shift()!
@@ -180,7 +173,7 @@ export class DAG {
   /**
    * Root에서 도달 불가능한 노드들 찾기
    */
-  getUnreachableNodes(): DAGNode[] {
+  getUnreachableNodes(): TreeNode[] {
     if (!this.root) {
       return this.getAllNodes()
     }
@@ -190,21 +183,15 @@ export class DAG {
   }
 
   /**
-   * 특정 노드의 모든 조상 찾기
+   * 특정 노드의 모든 조상 찾기 (트리: 루트까지 직선 경로)
    */
-  getAncestors(node: DAGNode): Set<string> {
+  getAncestors(node: TreeNode): Set<string> {
     const ancestors = new Set<string>()
-    const queue: DAGNode[] = [...node.parents]
+    let current = node.parent
 
-    while (queue.length > 0) {
-      const parent = queue.shift()!
-
-      if (ancestors.has(parent.name)) continue
-      ancestors.add(parent.name)
-
-      for (const grandparent of parent.parents) {
-        queue.push(grandparent)
-      }
+    while (current) {
+      ancestors.add(current.name)
+      current = current.parent
     }
 
     return ancestors
@@ -213,9 +200,9 @@ export class DAG {
   /**
    * 특정 노드의 모든 자손 찾기
    */
-  getDescendants(node: DAGNode): Set<string> {
+  getDescendants(node: TreeNode): Set<string> {
     const descendants = new Set<string>()
-    const queue: DAGNode[] = [...node.children]
+    const queue: TreeNode[] = [...node.children]
 
     while (queue.length > 0) {
       const child = queue.shift()!
@@ -232,13 +219,13 @@ export class DAG {
   }
 
   /**
-   * DAG를 시각화용 문자열로 변환
+   * 트리를 시각화용 문자열로 변환
    */
   toString(): string {
     const lines: string[] = []
     const visited = new Set<string>()
 
-    const print = (node: DAGNode, indent: number = 0) => {
+    const print = (node: TreeNode, indent: number = 0) => {
       if (visited.has(node.name)) {
         lines.push('  '.repeat(indent) + `${node.name} (already visited)`)
         return
@@ -262,9 +249,9 @@ export class DAG {
   }
 
   /**
-   * DAG를 JSON으로 직렬화
+   * 트리를 JSON으로 직렬화
    */
-  toJSON(): DAGGraph {
+  toJSON(): TreeGraph {
     return {
       nodes: this.nodes,
       root: this.root

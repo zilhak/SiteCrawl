@@ -647,6 +647,7 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
               }}
               parentCategory={parentData?.taskCategory}
               isParentRoot={parentData?.isRoot}
+              isFinalRoot={parentData?.isFinalRoot}
               isReadOnly={!!(selectedNode.data as TaskNodeData).isRoot}
               onUpdate={handleUpdateNode}
               onClose={() => {
