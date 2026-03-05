@@ -28,7 +28,7 @@ export interface CrawlHistory {
 }
 
 // Task
-export type TaskCategory = 'string_filter' | 'page_navigation' | 'link_extraction' | 'resource_extraction' | 'string_db_save' | 'string_display'
+export type TaskCategory = 'string_filter' | 'page_navigation' | 'link_extraction' | 'resource_extraction' | 'string_db_save' | 'string_display' | 'result_save'
 
 export interface Task {
   id: string
@@ -45,10 +45,11 @@ export type AnyTask = Task
 // Pipeline
 export interface PipelineTask {
   name: string                    // Pipeline 내 고유 이름
-  trigger: string                 // 실행 조건: '_run_' 또는 다른 Task의 name
+  trigger: string                 // 실행 조건: '_run_' | '_final_' 또는 다른 Task의 name
   category: TaskCategory          // Task 카테고리
   taskConfig: Record<string, unknown>  // 카테고리별 config (인라인)
   taskId?: string                 // 기존 Task 참조 (선택)
+  phase?: 'process' | 'final'    // 실행 구간 (기본값: 'process')
 }
 
 export interface Pipeline {

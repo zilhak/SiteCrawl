@@ -10,7 +10,9 @@ import {
   IconButton,
   Stack,
   AppBar,
-  Toolbar
+  Toolbar,
+  ToggleButtonGroup,
+  ToggleButton
 } from '@mui/material'
 import SaveIcon from '@mui/icons-material/Save'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
@@ -45,6 +47,52 @@ interface PipelineEditorPageProps {
   onClose: () => void
 }
 
+// Final 구간의 루트 노드 생성 헬퍼
+function createFinalRootNode(
+  onAddChild: (id: string) => void,
+  onDelete: (id: string) => void,
+  onSelect: (id: string) => void
+): Node {
+  return {
+    id: 'final-root',
+    type: 'taskNode',
+    position: { x: 400, y: 50 },
+    data: {
+      nodeId: 'final-root',
+      taskName: '_final_',
+      isRoot: true,
+      isFinalRoot: true,
+      isConfigured: true,
+      onAddChild,
+      onDelete,
+      onSelect
+    }
+  }
+}
+
+// Process 구간의 루트 노드 생성 헬퍼
+function createProcessRootNode(
+  onAddChild: (id: string) => void,
+  onDelete: (id: string) => void,
+  onSelect: (id: string) => void
+): Node {
+  return {
+    id: 'root',
+    type: 'taskNode',
+    position: { x: 400, y: 50 },
+    data: {
+      nodeId: 'root',
+      taskName: '_run_',
+      taskCategory: 'page_navigation',
+      isRoot: true,
+      isConfigured: true,
+      onAddChild,
+      onDelete,
+      onSelect
+    }
+  }
+}
+
 export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEditorPageProps) {
   const [pipeline, setPipeline] = useState<Pipeline | null>(null)
 
@@ -64,6 +112,15 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
   const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
   const nodeCounterRef = useRef(0)
+
+  // --- Process/Final 구간 토글 ---
+  const [editorPhase, setEditorPhase] = useState<'process' | 'final'>('process')
+
+  // 각 phase의 노드/엣지를 별도 ref에 보관
+  const processNodesRef = useRef<Node[]>([])
+  const processEdgesRef = useRef<Edge[]>([])
+  const finalNodesRef = useRef<Node[]>([])
+  const finalEdgesRef = useRef<Edge[]>([])
 
   // 우측 패널: 선택된 노드
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
@@ -98,29 +155,17 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
     }
   }
 
-  const loadNodesFromPipeline = (pipelineData: Pipeline) => {
-    const rootNode: Node = {
-      id: 'root',
-      type: 'taskNode',
-      position: { x: 400, y: 50 },
-      data: {
-        nodeId: 'root',
-        taskName: '_run_',
-        taskCategory: 'page_navigation',
-        isRoot: true,
-        isConfigured: true,
-        onAddChild: handleAddChild,
-        onDelete: handleDeleteNode,
-        onSelect: handleSelectNode
-      }
-    }
-
+  // tasks 배열에서 특정 phase의 노드/엣지를 생성하는 헬퍼
+  const buildNodesFromTasks = (
+    tasks: PipelineTask[],
+    rootNode: Node,
+    rootTriggerName: string
+  ): { nodes: Node[], edges: Edge[], counter: number } => {
     const newNodes: Node[] = [rootNode]
     const newEdges: Edge[] = []
 
-    // 부모별 자식 그룹
     const childrenByParent = new Map<string, PipelineTask[]>()
-    pipelineData.tasks.forEach(task => {
+    tasks.forEach(task => {
       const parent = task.trigger
       if (!childrenByParent.has(parent)) {
         childrenByParent.set(parent, [])
@@ -129,7 +174,7 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
     })
 
     const nodeByName = new Map<string, Node>()
-    nodeByName.set('_run_', rootNode)
+    nodeByName.set(rootTriggerName, rootNode)
 
     let counter = 0
     const layoutNode = (parentName: string, parentNode: Node) => {
@@ -174,38 +219,100 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
       })
     }
 
-    layoutNode('_run_', rootNode)
+    layoutNode(rootTriggerName, rootNode)
 
-    setNodes(newNodes)
-    setEdges(newEdges)
-    nodeCounterRef.current = counter
+    return { nodes: newNodes, edges: newEdges, counter }
+  }
+
+  const loadNodesFromPipeline = (pipelineData: Pipeline) => {
+    // process tasks: phase가 'final'이 아닌 것 (기본값 포함)
+    const processTasks = pipelineData.tasks.filter(t => t.phase !== 'final')
+    // final tasks: phase가 'final'인 것
+    const finalTasks = pipelineData.tasks.filter(t => t.phase === 'final')
+
+    // Process 구간 빌드
+    const processRoot = createProcessRootNode(handleAddChild, handleDeleteNode, handleSelectNode)
+    const processResult = buildNodesFromTasks(processTasks, processRoot, '_run_')
+
+    // Final 구간 빌드
+    const finalRoot = createFinalRootNode(handleAddChild, handleDeleteNode, handleSelectNode)
+    const finalResult = buildNodesFromTasks(finalTasks, finalRoot, '_final_')
+
+    // ref에 저장
+    processNodesRef.current = processResult.nodes
+    processEdgesRef.current = processResult.edges
+    finalNodesRef.current = finalResult.nodes
+    finalEdgesRef.current = finalResult.edges
+
+    // 현재 phase에 따라 화면에 표시
+    const maxCounter = Math.max(processResult.counter, finalResult.counter)
+    nodeCounterRef.current = maxCounter
+
+    if (editorPhase === 'process') {
+      setNodes(processResult.nodes)
+      setEdges(processResult.edges)
+    } else {
+      setNodes(finalResult.nodes)
+      setEdges(finalResult.edges)
+    }
   }
 
   const initializeNodes = () => {
-    const rootNode: Node = {
-      id: 'root',
-      type: 'taskNode',
-      position: { x: 400, y: 50 },
-      data: {
-        nodeId: 'root',
-        taskName: '_run_',
-        taskCategory: 'page_navigation',
-        isRoot: true,
-        isConfigured: true,
-        onAddChild: handleAddChild,
-        onDelete: handleDeleteNode,
-        onSelect: handleSelectNode
-      }
-    }
-    setNodes([rootNode])
+    const processRoot = createProcessRootNode(handleAddChild, handleDeleteNode, handleSelectNode)
+    const finalRoot = createFinalRootNode(handleAddChild, handleDeleteNode, handleSelectNode)
+
+    processNodesRef.current = [processRoot]
+    processEdgesRef.current = []
+    finalNodesRef.current = [finalRoot]
+    finalEdgesRef.current = []
+
+    // 기본은 process phase
+    setNodes([processRoot])
     setEdges([])
   }
+
+  // --- Phase 전환 핸들러 ---
+
+  const handlePhaseChange = useCallback((_event: React.MouseEvent<HTMLElement>, newPhase: 'process' | 'final' | null) => {
+    if (!newPhase || newPhase === editorPhase) return
+
+    // 현재 phase의 노드/엣지를 ref에 저장
+    setNodes(currentNodes => {
+      setEdges(currentEdges => {
+        if (editorPhase === 'process') {
+          processNodesRef.current = currentNodes
+          processEdgesRef.current = currentEdges
+        } else {
+          finalNodesRef.current = currentNodes
+          finalEdgesRef.current = currentEdges
+        }
+        return currentEdges
+      })
+      return currentNodes
+    })
+
+    // 선택 해제
+    setSelectedNodeId(null)
+
+    // 다음 phase의 노드/엣지로 교체 (약간의 딜레이로 상태 저장 완료 보장)
+    setTimeout(() => {
+      if (newPhase === 'process') {
+        setNodes(processNodesRef.current)
+        setEdges(processEdgesRef.current)
+      } else {
+        setNodes(finalNodesRef.current)
+        setEdges(finalEdgesRef.current)
+      }
+      setEditorPhase(newPhase)
+    }, 0)
+  }, [editorPhase])
 
   // --- 핸들러 ---
 
   const handleAddChild = useCallback((parentId: string) => {
     // setEdges/setNodes 함수형 업데이트로만 상태 접근 → stale closure 방지
     setEdges(currentEdges => {
+      // _run_ 루트에만 자식 1개 제한 (final-root에는 제한 없음)
       if (parentId === 'root') {
         const rootChildren = currentEdges.filter(e => e.source === 'root')
         if (rootChildren.length > 0) {
@@ -310,6 +417,58 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
     }))
   }, [selectedNodeId])
 
+  // --- 두 phase의 노드/엣지에서 tasks 배열을 추출하는 헬퍼 ---
+
+  const extractTasksFromPhase = (
+    phaseNodes: Node[],
+    phaseEdges: Edge[],
+    phase: 'process' | 'final'
+  ): PipelineTask[] => {
+    const tasks: PipelineTask[] = []
+    const nodeById = new Map<string, Node>()
+    phaseNodes.forEach(n => nodeById.set(n.id, n))
+
+    for (const edge of phaseEdges) {
+      const sourceNode = nodeById.get(edge.source)
+      const targetNode = nodeById.get(edge.target)
+      if (!sourceNode || !targetNode) continue
+      if (!targetNode.data.isConfigured) continue
+
+      const targetData = targetNode.data as TaskNodeData
+      if (!targetData.taskCategory) continue
+
+      tasks.push({
+        name: targetData.taskName,
+        trigger: (sourceNode.data as TaskNodeData).taskName,
+        category: targetData.taskCategory,
+        taskConfig: targetData.taskConfig || {},
+        phase
+      })
+    }
+
+    return tasks
+  }
+
+  // 현재 phase와 ref에서 양쪽 노드/엣지를 가져오는 헬퍼
+  const getAllPhaseData = () => {
+    let processNodes: Node[], processEdges: Edge[]
+    let finalNodes: Node[], finalEdges: Edge[]
+
+    if (editorPhase === 'process') {
+      processNodes = nodes
+      processEdges = edges
+      finalNodes = finalNodesRef.current
+      finalEdges = finalEdgesRef.current
+    } else {
+      processNodes = processNodesRef.current
+      processEdges = processEdgesRef.current
+      finalNodes = nodes
+      finalEdges = edges
+    }
+
+    return { processNodes, processEdges, finalNodes, finalEdges }
+  }
+
   // --- 저장 ---
 
   const handleSave = async () => {
@@ -318,9 +477,13 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
       return
     }
 
-    const unconfiguredNodes = nodes.filter(n =>
-      !n.data.isRoot && !n.data.isConfigured
-    )
+    const { processNodes, processEdges, finalNodes, finalEdges } = getAllPhaseData()
+
+    const allNonRootNodes = [
+      ...processNodes.filter(n => !n.data.isRoot),
+      ...finalNodes.filter(n => !n.data.isRoot)
+    ]
+    const unconfiguredNodes = allNonRootNodes.filter(n => !n.data.isConfigured)
 
     if (unconfiguredNodes.length > 0) {
       const ok = confirm(
@@ -330,26 +493,9 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
     }
 
     try {
-      const tasks: PipelineTask[] = []
-      const nodeById = new Map<string, Node>()
-      nodes.forEach(n => nodeById.set(n.id, n))
-
-      for (const edge of edges) {
-        const sourceNode = nodeById.get(edge.source)
-        const targetNode = nodeById.get(edge.target)
-        if (!sourceNode || !targetNode) continue
-        if (!targetNode.data.isConfigured) continue
-
-        const targetData = targetNode.data as TaskNodeData
-        if (!targetData.taskCategory) continue
-
-        tasks.push({
-          name: targetData.taskName,
-          trigger: (sourceNode.data as TaskNodeData).taskName,
-          category: targetData.taskCategory,
-          taskConfig: targetData.taskConfig || {}
-        })
-      }
+      const processTasks = extractTasksFromPhase(processNodes, processEdges, 'process')
+      const finalTasks = extractTasksFromPhase(finalNodes, finalEdges, 'final')
+      const tasks = [...processTasks, ...finalTasks]
 
       if (pipelineId) {
         const updatedPipeline: Pipeline = {
@@ -394,32 +540,17 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
   // --- JSON 뷰어용 파이프라인 데이터 구축 ---
 
   const buildPipelineJson = useCallback(() => {
-    const nodeById = new Map<string, Node>()
-    nodes.forEach(n => nodeById.set(n.id, n))
+    const { processNodes, processEdges, finalNodes, finalEdges } = getAllPhaseData()
 
-    const tasks: PipelineTask[] = []
-    for (const edge of edges) {
-      const targetNode = nodeById.get(edge.target)
-      const sourceNode = nodeById.get(edge.source)
-      if (!targetNode || !sourceNode) continue
-      const td = targetNode.data as TaskNodeData
-      const sd = sourceNode.data as TaskNodeData
-      if (!td.taskCategory) continue
-
-      tasks.push({
-        name: td.taskName,
-        trigger: sd.taskName,
-        category: td.taskCategory,
-        taskConfig: td.taskConfig || {}
-      })
-    }
+    const processTasks = extractTasksFromPhase(processNodes, processEdges, 'process')
+    const finalTasks = extractTasksFromPhase(finalNodes, finalEdges, 'final')
 
     return {
       name: pipelineName || '',
       description: pipelineDesc || '',
-      tasks
+      tasks: [...processTasks, ...finalTasks]
     }
-  }, [nodes, edges, pipelineName, pipelineDesc])
+  }, [nodes, edges, pipelineName, pipelineDesc, editorPhase])
 
   return (
     <Box sx={{ height: 'calc(100vh - 32px)', display: 'flex', flexDirection: 'column' }}>
@@ -450,6 +581,20 @@ export default function PipelineEditorPage({ pipelineId, onClose }: PipelineEdit
               helperText={errorsInfo.description?.message}
             />
           </Box>
+          <ToggleButtonGroup
+            value={editorPhase}
+            exclusive
+            onChange={handlePhaseChange}
+            size="small"
+            sx={{ mr: 2 }}
+          >
+            <ToggleButton value="process" sx={{ textTransform: 'none', px: 2 }}>
+              Process
+            </ToggleButton>
+            <ToggleButton value="final" sx={{ textTransform: 'none', px: 2 }}>
+              Final
+            </ToggleButton>
+          </ToggleButtonGroup>
           <Button
             variant="contained"
             startIcon={<SaveIcon />}

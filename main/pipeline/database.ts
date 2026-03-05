@@ -34,6 +34,7 @@ export class PipelineDatabase {
     try {
       const tableInfo = this.db.pragma('table_info(pipeline_tasks)') as { name: string }[]
       if (tableInfo.length > 0 && !tableInfo.some(col => col.name === 'category')) {
+        console.log('[DEBUG:init] DROPPING pipeline_tasks (no category column)')
         this.db.exec('DROP TABLE IF EXISTS pipeline_tasks')
       }
     } catch { /* 테이블이 아예 없는 경우 무시 */ }
@@ -57,6 +58,15 @@ export class PipelineDatabase {
     try {
       this.db.prepare(`UPDATE pipeline_tasks SET category = 'link_extraction' WHERE category = 'string_extraction'`).run()
     } catch { /* 테이블이 없으면 무시 */ }
+
+    // phase 컬럼 마이그레이션 (process/final 구간 지원)
+    try {
+      const taskTableInfo = this.db.pragma('table_info(pipeline_tasks)') as { name: string }[]
+      if (taskTableInfo.length > 0 && !taskTableInfo.some(col => col.name === 'phase')) {
+        this.db.exec(`ALTER TABLE pipeline_tasks ADD COLUMN phase TEXT DEFAULT 'process'`)
+        console.log('[DEBUG:init] Added phase column to pipeline_tasks')
+      }
+    } catch { /* 테이블이 없는 경우 무시 */ }
 
     // Pipeline 실행 히스토리
     this.db.exec(`
@@ -83,6 +93,13 @@ export class PipelineDatabase {
         FOREIGN KEY (pipeline_id) REFERENCES pipelines(id) ON DELETE CASCADE
       )
     `)
+
+    // 초기화 후 데이터 확인
+    try {
+      const pipelineCount = (this.db.prepare('SELECT COUNT(*) as cnt FROM pipelines').get() as any).cnt
+      const taskCount = (this.db.prepare('SELECT COUNT(*) as cnt FROM pipeline_tasks').get() as any).cnt
+      console.log('[DEBUG:init] after init - pipelines:', pipelineCount, 'tasks:', taskCount)
+    } catch { /* ignore */ }
 
     // 인덱스 생성
     this.db.exec(`
@@ -129,8 +146,8 @@ export class PipelineDatabase {
 
       // Task 저장
       const taskStmt = this.db!.prepare(`
-        INSERT INTO pipeline_tasks (pipeline_id, name, trigger_name, category, task_config, task_id)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO pipeline_tasks (pipeline_id, name, trigger_name, category, task_config, task_id, phase)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
       `)
 
       for (const task of pipeline.tasks) {
@@ -140,12 +157,14 @@ export class PipelineDatabase {
           task.trigger,
           task.category,
           JSON.stringify(task.taskConfig),
-          task.taskId || null
+          task.taskId || null,
+          task.phase || 'process'
         )
       }
     })
 
     transaction()
+    console.log('[DEBUG:db] savePipeline transaction committed, id:', pipeline.id)
   }
 
   /**
@@ -164,7 +183,7 @@ export class PipelineDatabase {
 
     // Tasks 조회
     const tasksStmt = this.db.prepare(`
-      SELECT name, trigger_name, category, task_config, task_id
+      SELECT name, trigger_name, category, task_config, task_id, phase
       FROM pipeline_tasks
       WHERE pipeline_id = ?
     `)
@@ -175,7 +194,8 @@ export class PipelineDatabase {
       trigger: row.trigger_name,
       category: row.category,
       taskConfig: JSON.parse(row.task_config || '{}'),
-      ...(row.task_id ? { taskId: row.task_id } : {})
+      ...(row.task_id ? { taskId: row.task_id } : {}),
+      ...(row.phase && row.phase !== 'process' ? { phase: row.phase } : {})
     }))
 
     return {

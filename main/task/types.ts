@@ -4,7 +4,7 @@
  */
 
 // Task 카테고리
-export type TaskCategory = 'string_filter' | 'page_navigation' | 'link_extraction' | 'resource_extraction' | 'string_db_save' | 'string_display'
+export type TaskCategory = 'string_filter' | 'page_navigation' | 'link_extraction' | 'resource_extraction' | 'string_db_save' | 'string_display' | 'result_save'
 
 // 기본 Task 인터페이스
 export interface Task {
@@ -76,6 +76,7 @@ export interface StringDbSaveTask extends Task {
 
 export interface StringDbSaveConfig {
   deduplication: boolean  // 같은 pipeline에서 이미 저장된 문자열 중복 방지
+  resultIndex?: number | 'all'  // Result에서 읽기 (Final 구간용)
 }
 
 // 6. 문자열 화면 표시 태스크: string[] → string[] (pass-through)
@@ -86,13 +87,24 @@ export interface StringDisplayTask extends Task {
 
 export interface StringDisplayConfig {
   label?: string  // 표시 영역 제목 (미지정 시 태스크 이름 사용)
+  resultIndex?: number | 'all'  // Result에서 읽기 (Final 구간용)
+}
+
+// 7. Result 저장 태스크: string[] → 없음 (터미널)
+export interface ResultSaveTask extends Task {
+  category: 'result_save'
+  config: ResultSaveConfig
+}
+
+export interface ResultSaveConfig {
+  targetIndex: number  // -1이면 append, 0 이상이면 해당 인덱스에 저장
 }
 
 // Task 유니온 타입
-export type AnyTask = StringFilterTask | PageNavigationTask | LinkExtractionTask | ResourceExtractionTask | StringDbSaveTask | StringDisplayTask
+export type AnyTask = StringFilterTask | PageNavigationTask | LinkExtractionTask | ResourceExtractionTask | StringDbSaveTask | StringDisplayTask | ResultSaveTask
 
 // Task Config 유니온 타입
-export type AnyTaskConfig = StringFilterConfig | PageNavigationConfig | LinkExtractionConfig | ResourceExtractionConfig | StringDbSaveConfig | StringDisplayConfig
+export type AnyTaskConfig = StringFilterConfig | PageNavigationConfig | LinkExtractionConfig | ResourceExtractionConfig | StringDbSaveConfig | StringDisplayConfig | ResultSaveConfig
 
 // Task 생성 DTO
 export interface CreateTaskDTO {

@@ -65,6 +65,8 @@ function getDefaultConfig(category: TaskCategory): Record<string, unknown> {
       return { deduplication: false }
     case 'string_display':
       return { label: '' }
+    case 'result_save':
+      return { targetIndex: -1 }
   }
 }
 
@@ -139,8 +141,10 @@ export default function TaskPropertyPanel({
       <Box sx={{ flex: 1, overflow: 'auto', p: 2 }}>
         {isReadOnly ? (
           <Stack spacing={2}>
-            <Alert severity="info" variant="outlined">
-              _run_ 노드는 파이프라인 진입점으로, 페이지 이동 Task로 고정되어 있습니다.
+            <Alert severity={data.taskName === '_final_' ? 'warning' : 'info'} variant="outlined">
+              {data.taskName === '_final_'
+                ? '_final_ 노드는 Final 구간의 진입점입니다.'
+                : '_run_ 노드는 파이프라인 진입점으로, 페이지 이동 Task로 고정되어 있습니다.'}
             </Alert>
             <TextField
               fullWidth
@@ -274,6 +278,13 @@ export default function TaskPropertyPanel({
 
                 {category === 'string_display' && (
                   <StringDisplayConfigForm
+                    config={config}
+                    onChange={handleConfigChange}
+                  />
+                )}
+
+                {category === 'result_save' && (
+                  <ResultSaveConfigForm
                     config={config}
                     onChange={handleConfigChange}
                   />
@@ -502,9 +513,47 @@ const RESOURCE_TYPES = [
   { value: 'js', label: 'JS' }
 ] as const
 
+function ResultSourceSelect({ config, onChange }: ConfigProps) {
+  const resultIndex = config.resultIndex as (number | 'all' | undefined)
+  const selectValue = resultIndex === undefined ? 'none' : resultIndex === 'all' ? 'all' : 'index'
+
+  return (
+    <>
+      <FormControl fullWidth size="small">
+        <InputLabel>Result 소스</InputLabel>
+        <Select
+          value={selectValue}
+          label="Result 소스"
+          onChange={(e) => {
+            const v = e.target.value
+            if (v === 'none') onChange('resultIndex', undefined)
+            else if (v === 'all') onChange('resultIndex', 'all')
+            else onChange('resultIndex', 0)
+          }}
+        >
+          <MenuItem value="none">없음 (DAG 입력 사용)</MenuItem>
+          <MenuItem value="index">Result 인덱스 지정</MenuItem>
+          <MenuItem value="all">Result 전체</MenuItem>
+        </Select>
+      </FormControl>
+      {typeof config.resultIndex === 'number' && (
+        <TextField
+          label="Result 인덱스"
+          type="number"
+          value={config.resultIndex}
+          onChange={(e) => onChange('resultIndex', parseInt(e.target.value) || 0)}
+          size="small"
+          fullWidth
+        />
+      )}
+    </>
+  )
+}
+
 function StringDbSaveConfigForm({ config, onChange }: ConfigProps) {
   return (
     <Stack spacing={2}>
+      <ResultSourceSelect config={config} onChange={onChange} />
       <FormControlLabel
         control={
           <Switch
@@ -521,6 +570,7 @@ function StringDbSaveConfigForm({ config, onChange }: ConfigProps) {
 function StringDisplayConfigForm({ config, onChange }: ConfigProps) {
   return (
     <Stack spacing={2}>
+      <ResultSourceSelect config={config} onChange={onChange} />
       <TextField
         fullWidth
         size="small"
@@ -574,6 +624,22 @@ function ResourceExtractionConfig({ config, onChange }: ConfigProps) {
         wildcardsKey="filterWildcards"
         config={config}
         onChange={onChange}
+      />
+    </Stack>
+  )
+}
+
+function ResultSaveConfigForm({ config, onChange }: ConfigProps) {
+  return (
+    <Stack spacing={2}>
+      <TextField
+        label="Target Index"
+        type="number"
+        value={config.targetIndex ?? -1}
+        onChange={(e) => onChange('targetIndex', parseInt(e.target.value) || -1)}
+        helperText="-1: 마지막에 추가 (append), 0 이상: 해당 인덱스에 저장"
+        size="small"
+        fullWidth
       />
     </Stack>
   )

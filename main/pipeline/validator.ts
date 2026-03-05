@@ -59,7 +59,7 @@ export class PipelineValidator {
         continue
       }
 
-      if (task.trigger !== '_run_' && !nameSet.has(task.trigger)) {
+      if (task.trigger !== '_run_' && task.trigger !== '_final_' && !nameSet.has(task.trigger)) {
         errors.push(`Task "${task.name}"의 trigger "${task.trigger}"를 찾을 수 없습니다`)
       }
 
@@ -90,6 +90,7 @@ export class PipelineValidator {
           const node = dag.getNode(task.name)
           if (!node) return false
           return task.trigger !== '_run_' &&
+                 task.trigger !== '_final_' &&
                  node.parents.length === 0 &&
                  node.children.length === 0
         })
@@ -101,6 +102,48 @@ export class PipelineValidator {
 
       } catch (error) {
         errors.push(`DAG 생성 실패: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      }
+    }
+
+    // 8. '_final_' trigger 검증: final phase task만 '_final_' trigger를 가질 수 있음
+    for (const task of pipeline.tasks) {
+      if (task.trigger === '_final_' && task.phase !== 'final') {
+        errors.push(`Task "${task.name}"는 phase가 'final'이 아닌데 "_final_" trigger를 사용합니다. "_final_" trigger는 phase가 'final'인 Task만 사용할 수 있습니다`)
+      }
+    }
+
+    // 9. '_run_' trigger 검증: process phase(또는 phase 미지정) task만 '_run_' trigger를 가질 수 있음
+    for (const task of pipeline.tasks) {
+      if (task.trigger === '_run_' && task.phase === 'final') {
+        errors.push(`Task "${task.name}"는 phase가 'final'인데 "_run_" trigger를 사용합니다. "_run_" trigger는 process phase(또는 phase 미지정) Task만 사용할 수 있습니다`)
+      }
+    }
+
+    // 10. 'result_save' Task는 자식 노드를 가질 수 없음 (터미널 노드)
+    const resultSaveNames = new Set(
+      pipeline.tasks.filter(t => t.category === 'result_save').map(t => t.name)
+    )
+    for (const task of pipeline.tasks) {
+      if (resultSaveNames.has(task.trigger)) {
+        errors.push(`Task "${task.name}"의 trigger "${task.trigger}"는 'result_save' 카테고리 Task입니다. result_save Task는 터미널 노드로 자식을 가질 수 없습니다`)
+      }
+    }
+
+    // 11. phase 간 trigger 참조 검증: 같은 phase 내에서만 trigger 참조 가능
+    // (단, '_run_'은 process phase 루트, '_final_'은 final phase 루트이므로 제외)
+    const taskPhaseMap = new Map<string, 'process' | 'final'>()
+    for (const task of pipeline.tasks) {
+      taskPhaseMap.set(task.name, task.phase || 'process')
+    }
+
+    for (const task of pipeline.tasks) {
+      if (task.trigger === '_run_' || task.trigger === '_final_') continue
+
+      const taskPhase = task.phase || 'process'
+      const triggerPhase = taskPhaseMap.get(task.trigger)
+
+      if (triggerPhase !== undefined && triggerPhase !== taskPhase) {
+        errors.push(`Task "${task.name}" (phase: '${taskPhase}')가 다른 phase의 Task "${task.trigger}" (phase: '${triggerPhase}')를 trigger로 참조합니다. phase 간 trigger 참조는 허용되지 않습니다`)
       }
     }
 

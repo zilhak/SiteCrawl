@@ -18,6 +18,7 @@ import type {
   PipelineExecutionResult
 } from './types'
 import { TASK_IO_MAP } from './types'
+import { ResultStore } from './result'
 
 export interface EngineDependencies {
   onProgress: (event: ExecutionProgressEvent) => void
@@ -31,6 +32,7 @@ export class PipelineExecutionEngine {
   private context: BrowserContext | null = null
   private currentPipelineId: string = ''
   private currentExecutionId: string = ''
+  private resultStore: ResultStore = new ResultStore()
 
   constructor(deps: EngineDependencies) {
     this.onProgress = deps.onProgress
@@ -38,7 +40,7 @@ export class PipelineExecutionEngine {
   }
 
   /**
-   * 파이프라인 실행
+   * 파이프라인 실행 (Process → Final 2단계)
    */
   async execute(
     pipeline: Pipeline,
@@ -49,6 +51,7 @@ export class PipelineExecutionEngine {
     const results: NodeExecutionResult[] = []
     this.currentPipelineId = pipeline.id
     this.currentExecutionId = executionId
+    this.resultStore = new ResultStore()
 
     try {
       // 1. 검증
@@ -66,62 +69,25 @@ export class PipelineExecutionEngine {
         }
       }
 
-      // 2. DAG 생성 + 위상 정렬
-      const dag = DAG.fromPipeline(pipeline)
-      const executionOrder = dag.topologicalSort()
-
-      // 3. 브라우저 초기화
+      // 2. 브라우저 초기화
       await this.initBrowser()
 
-      // 4. _run_ 초기 페이지 이동 (진입점)
+      // 3. _run_ 초기 페이지 이동 (진입점)
       const initialPage = await this.executeInitialNavigation(initialUrl)
 
-      // 5. 노드별 출력 저장소
-      const nodeOutputs = new Map<string, TaskData>()
+      // 4. Process 구간 실행
+      const processDAG = DAG.fromPipeline(pipeline, 'process')
+      const processResult = await this.executePhase(processDAG, initialPage, executionId)
+      results.push(...processResult.results)
 
-      // 6. 실패한 노드 추적 (하위 브랜치 스킵용)
-      const failedNodes = new Set<string>()
-
-      // 7. 위상 정렬 순서대로 실행
-      for (const node of executionOrder) {
-        // 부모가 실패했으면 이 노드도 스킵
-        if (this.isAncestorFailed(node, dag, failedNodes)) {
-          failedNodes.add(node.name)
-          results.push({
-            taskName: node.name,
-            taskId: node.taskId || node.name,
-            success: false,
-            output: null,
-            error: '상위 Task 실패로 인해 건너뜀',
-            startedAt: Date.now(),
-            completedAt: Date.now()
-          })
-          continue
-        }
-
-        // 진행 이벤트 발행
-        this.emitProgress(executionId, node, 'running', '실행 중...')
-
-        // 부모 출력 가져오기
-        const parentOutput = this.getParentOutput(node, nodeOutputs, initialPage)
-
-        // 입력 타입 어댑팅
-        const adaptedInput = this.adaptInput(parentOutput, node.category)
-
-        // Task 실행 (인라인 config 사용)
-        const result = await this.executeTask(node.category, node.taskConfig, adaptedInput, node)
-        results.push(result)
-
-        if (result.success && result.output) {
-          nodeOutputs.set(node.name, result.output)
-          this.emitProgress(executionId, node, 'completed', '완료')
-        } else {
-          failedNodes.add(node.name)
-          this.emitProgress(executionId, node, 'failed', result.error || '실행 실패')
-        }
+      // 5. Final 구간 실행 (Process 완료 후)
+      const finalDAG = DAG.fromPipeline(pipeline, 'final')
+      if (finalDAG.getRoot()) {
+        const finalResult = await this.executePhase(finalDAG, initialPage, executionId)
+        results.push(...finalResult.results)
       }
 
-      // 8. 최종 상태 결정
+      // 6. 최종 상태 결정
       const allSuccess = results.every(r => r.success)
       const allFailed = results.every(r => !r.success)
       const status = allSuccess ? 'completed' : allFailed ? 'failed' : 'partially_failed'
@@ -150,6 +116,63 @@ export class PipelineExecutionEngine {
   }
 
   /**
+   * 단일 구간(phase) 실행
+   */
+  private async executePhase(
+    dag: DAG,
+    initialPage: Page,
+    executionId: string
+  ): Promise<{ results: NodeExecutionResult[], nodeOutputs: Map<string, TaskData> }> {
+    const results: NodeExecutionResult[] = []
+    const nodeOutputs = new Map<string, TaskData>()
+    const failedNodes = new Set<string>()
+    const executionOrder = dag.topologicalSort()
+
+    for (const node of executionOrder) {
+      // 부모가 실패했으면 이 노드도 스킵
+      if (this.isAncestorFailed(node, dag, failedNodes)) {
+        failedNodes.add(node.name)
+        results.push({
+          taskName: node.name,
+          taskId: node.taskId || node.name,
+          success: false,
+          output: null,
+          error: '상위 Task 실패로 인해 건너뜀',
+          startedAt: Date.now(),
+          completedAt: Date.now()
+        })
+        continue
+      }
+
+      // 진행 이벤트 발행
+      this.emitProgress(executionId, node, 'running', '실행 중...')
+
+      // 부모 출력 가져오기
+      const parentOutput = this.getParentOutput(node, nodeOutputs, initialPage)
+
+      // 입력 타입 어댑팅
+      const adaptedInput = this.adaptInput(parentOutput, node.category)
+
+      // Task 실행 (인라인 config 사용)
+      const result = await this.executeTask(node.category, node.taskConfig, adaptedInput, node)
+      results.push(result)
+
+      // result_save는 output이 null이어도 성공
+      if (result.success) {
+        if (result.output) {
+          nodeOutputs.set(node.name, result.output)
+        }
+        this.emitProgress(executionId, node, 'completed', '완료')
+      } else {
+        failedNodes.add(node.name)
+        this.emitProgress(executionId, node, 'failed', result.error || '실행 실패')
+      }
+    }
+
+    return { results, nodeOutputs }
+  }
+
+  /**
    * 개별 Task 실행 (인라인 config 기반)
    */
   private async executeTask(
@@ -162,7 +185,7 @@ export class PipelineExecutionEngine {
     const taskId = node.taskId || node.name
 
     try {
-      let output: TaskData
+      let output: TaskData | null
 
       switch (category) {
         case 'string_filter':
@@ -182,6 +205,9 @@ export class PipelineExecutionEngine {
           break
         case 'string_display':
           output = await this.executeStringDisplay(taskConfig, input)
+          break
+        case 'result_save':
+          output = await this.executeResultSave(taskConfig, input)
           break
         default:
           throw new Error(`알 수 없는 Task 카테고리: ${category}`)
@@ -401,40 +427,96 @@ export class PipelineExecutionEngine {
 
   /**
    * 문자열 DB 저장 태스크: string[] → string[] (pass-through)
+   * Final 구간에서는 config.resultIndex로 Result에서 데이터를 읽을 수 있다.
    */
   private async executeStringDbSave(
     config: Record<string, unknown>,
     input: TaskData
   ): Promise<TaskData> {
-    if (input.type !== 'strings') {
-      throw new Error(`StringDbSaveTask는 strings 입력이 필요합니다. 받은 타입: ${input.type}`)
+    // Result에서 읽기 (config에 resultIndex가 있으면)
+    let data: TaskData = input
+    if (config.resultIndex !== undefined) {
+      const resultData = this.readFromResult(config.resultIndex as number | 'all')
+      if (resultData) data = resultData
+    }
+
+    if (data.type !== 'strings' && data.type !== 'urls') {
+      throw new Error(`StringDbSaveTask는 strings 입력이 필요합니다. 받은 타입: ${data.type}`)
     }
 
     const deduplication = (config.deduplication as boolean) ?? false
+    const values = [...data.value]
 
     // DB에 저장
     if (this.saveStringsFn) {
-      this.saveStringsFn(this.currentPipelineId, this.currentExecutionId, input.value, deduplication)
+      this.saveStringsFn(this.currentPipelineId, this.currentExecutionId, values, deduplication)
     }
 
-    // pass-through: 입력 그대로 반환 (불변 원칙)
-    return { type: 'strings', value: [...input.value] }
+    // pass-through (불변 원칙)
+    return { type: 'strings', value: values }
   }
 
   /**
    * 문자열 화면 표시 태스크: string[] → string[] (pass-through)
+   * Final 구간에서는 config.resultIndex로 Result에서 데이터를 읽을 수 있다.
    */
   private async executeStringDisplay(
-    _config: Record<string, unknown>,
+    config: Record<string, unknown>,
     input: TaskData
   ): Promise<TaskData> {
-    if (input.type !== 'strings') {
-      throw new Error(`StringDisplayTask는 strings 입력이 필요합니다. 받은 타입: ${input.type}`)
+    // Result에서 읽기 (config에 resultIndex가 있으면)
+    let data: TaskData = input
+    if (config.resultIndex !== undefined) {
+      const resultData = this.readFromResult(config.resultIndex as number | 'all')
+      if (resultData) data = resultData
     }
 
-    // pass-through: 입력 그대로 반환 (불변 원칙)
+    if (data.type !== 'strings' && data.type !== 'urls') {
+      throw new Error(`StringDisplayTask는 strings 입력이 필요합니다. 받은 타입: ${data.type}`)
+    }
+
+    // pass-through (불변 원칙)
     // 프론트엔드에서 category === 'string_display'인 결과를 특별히 렌더링
-    return { type: 'strings', value: [...input.value] }
+    return { type: 'strings', value: [...data.value] }
+  }
+
+  /**
+   * Result 저장 태스크: input → Result에 저장 (터미널, 출력 없음)
+   */
+  private async executeResultSave(
+    config: Record<string, unknown>,
+    input: TaskData
+  ): Promise<null> {
+    const targetIndex = (config.targetIndex as number) ?? -1
+
+    if (targetIndex === -1) {
+      this.resultStore.append(input)
+    } else {
+      this.resultStore.set(targetIndex, input)
+    }
+
+    return null  // 터미널: 출력 없음
+  }
+
+  /**
+   * ResultStore에서 데이터 읽기 헬퍼
+   */
+  private readFromResult(index: number | 'all'): TaskData | null {
+    if (index === 'all') {
+      // Result 전체를 strings로 평탄화
+      const all = this.resultStore.getAll()
+      const flattened: string[] = []
+      for (const item of all) {
+        if (item.type === 'strings' || item.type === 'urls') {
+          flattened.push(...item.value)
+        } else if (item.type === 'url') {
+          flattened.push(item.value)
+        }
+      }
+      return { type: 'strings', value: flattened }
+    }
+
+    return this.resultStore.get(index)
   }
 
   /**
@@ -445,9 +527,14 @@ export class PipelineExecutionEngine {
     nodeOutputs: Map<string, TaskData>,
     initialPage: Page
   ): TaskData {
-    // 루트 노드: _run_ 이 수행한 페이지 이동 결과 (Page 객체)
+    // Process 루트 노드: _run_ 이 수행한 페이지 이동 결과 (Page 객체)
     if (node.trigger === '_run_') {
       return { type: 'page', value: initialPage }
+    }
+
+    // Final 루트 노드: _final_ 은 Empty 타입 출력
+    if (node.trigger === '_final_') {
+      return { type: 'empty', value: null }
     }
 
     // 부모 노드의 출력
@@ -470,6 +557,16 @@ export class PipelineExecutionEngine {
     if (!expected) return parentOutput
 
     const expectedInput = expected.input
+
+    // Empty 타입: 대상 Task의 기대 입력에 맞는 빈 값으로 변환
+    if (parentOutput.type === 'empty') {
+      switch (expectedInput) {
+        case 'strings': return { type: 'strings', value: [] }
+        case 'urls': return { type: 'urls', value: [] }
+        case 'url': return { type: 'url', value: '' }
+        default: throw new Error(`Empty에서 '${expectedInput}' 타입으로 변환할 수 없습니다.`)
+      }
+    }
 
     // 정확히 일치하면 복사만 (불변 원칙)
     if (parentOutput.type === expectedInput) {
@@ -530,7 +627,7 @@ export class PipelineExecutionEngine {
     dag: DAG,
     failedNodes: Set<string>
   ): boolean {
-    if (node.trigger === '_run_') return false
+    if (node.trigger === '_run_' || node.trigger === '_final_') return false
     if (failedNodes.has(node.trigger)) return true
 
     // 부모의 부모도 재귀적으로 확인

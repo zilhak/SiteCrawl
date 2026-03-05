@@ -15,32 +15,44 @@ export class DAG {
 
   /**
    * Pipeline으로부터 DAG 생성
+   * @param phase 지정 시 해당 phase의 task만 포함. 미지정 시 모든 task 포함 (하위호환)
    */
-  static fromPipeline(pipeline: Pipeline): DAG {
+  static fromPipeline(pipeline: Pipeline, phase?: 'process' | 'final'): DAG {
     const dag = new DAG()
 
-    // 1. 모든 노드 생성
-    for (const task of pipeline.tasks) {
+    // phase 필터링: 지정된 경우 해당 phase의 task만 처리
+    const filteredTasks = phase === undefined
+      ? pipeline.tasks
+      : phase === 'process'
+        ? pipeline.tasks.filter(t => t.phase !== 'final')
+        : pipeline.tasks.filter(t => t.phase === 'final')
+
+    // 루트 trigger: phase에 따라 결정
+    const rootTrigger = phase === 'final' ? '_final_' : '_run_'
+
+    // 1. 필터링된 노드 생성
+    for (const task of filteredTasks) {
       const node: DAGNode = {
         name: task.name,
         category: task.category,
         taskConfig: task.taskConfig,
         trigger: task.trigger,
         taskId: task.taskId,
+        phase: task.phase || 'process',
         children: [],
         parents: []
       }
       dag.nodes.set(task.name, node)
 
       // root 노드 찾기
-      if (task.trigger === '_run_') {
+      if (task.trigger === rootTrigger) {
         dag.root = node
       }
     }
 
     // 2. 간선 연결 (부모-자식 관계)
-    for (const task of pipeline.tasks) {
-      if (task.trigger === '_run_') continue
+    for (const task of filteredTasks) {
+      if (task.trigger === '_run_' || task.trigger === '_final_') continue
 
       const childNode = dag.nodes.get(task.name)
       const parentNode = dag.nodes.get(task.trigger)

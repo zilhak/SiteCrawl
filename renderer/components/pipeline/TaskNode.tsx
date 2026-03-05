@@ -16,6 +16,7 @@ export interface TaskNodeData {
   taskCategory?: TaskCategory
   taskConfig?: Record<string, unknown>
   isRoot?: boolean
+  isFinalRoot?: boolean
   isConfigured: boolean
   isSelected?: boolean
   onAddChild: (nodeId: string) => void
@@ -52,7 +53,7 @@ export default function TaskNode({ data }: { data: TaskNodeData }) {
           textAlign: 'center',
           position: 'relative',
           bgcolor: data.isRoot
-            ? 'primary.main'
+            ? (data.isFinalRoot ? 'warning.main' : 'primary.main')
             : data.isConfigured
               ? 'background.paper'
               : 'background.default',
@@ -98,7 +99,7 @@ export default function TaskNode({ data }: { data: TaskNodeData }) {
 
         {data.isRoot ? (
           <Typography sx={{ fontSize: '11px', fontWeight: 700 }}>
-            _run_
+            {data.isFinalRoot ? '_final_' : '_run_'}
           </Typography>
         ) : data.isConfigured ? (
           <Typography sx={{ fontSize: '11px', fontWeight: 600 }} noWrap>
@@ -111,8 +112,8 @@ export default function TaskNode({ data }: { data: TaskNodeData }) {
         )}
       </Paper>
 
-      {/* 하단 + 버튼: 호버 시에만 */}
-      {isHovered && (
+      {/* 하단 + 버튼: 호버 시에만, result_save 제외 */}
+      {data.taskCategory !== 'result_save' && isHovered && (
         <IconButton
           size="small"
           sx={{

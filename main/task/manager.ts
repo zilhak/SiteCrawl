@@ -20,7 +20,8 @@ import type {
   ResourceExtractionConfig,
   StringDbSaveConfig,
   StringDisplayTask,
-  StringDisplayConfig
+  StringDisplayConfig,
+  ResultSaveConfig
 } from './types'
 import { TaskDatabase } from './database'
 
@@ -157,6 +158,17 @@ export class TaskManager {
         // 설정이 단순하여 특별한 검증 불필요
         break
       }
+      case 'result_save': {
+        const config = task.config as ResultSaveConfig
+        if (config.targetIndex === undefined || config.targetIndex === null) {
+          errors.push('targetIndex가 필요합니다')
+        } else if (typeof config.targetIndex !== 'number') {
+          errors.push('targetIndex는 숫자여야 합니다')
+        } else if (config.targetIndex < -1) {
+          errors.push('targetIndex는 -1 이상이어야 합니다')
+        }
+        break
+      }
     }
 
     return { valid: errors.length === 0, errors, warnings }
@@ -177,6 +189,8 @@ export class TaskManager {
         return { deduplication: false } as StringDbSaveConfig
       case 'string_display':
         return { label: '' } as StringDisplayConfig
+      case 'result_save':
+        return { targetIndex: -1 } as ResultSaveConfig
     }
   }
 

@@ -40,6 +40,7 @@ export class PipelineManager {
   savePipeline(pipeline: Pipeline): { success: boolean; error?: string } {
     // 검증
     const validation = this.validator.validate(pipeline)
+    console.log('[DEBUG:save] validation:', validation.valid, validation.errors)
     if (!validation.valid) {
       return {
         success: false,
@@ -50,8 +51,15 @@ export class PipelineManager {
     try {
       pipeline.updatedAt = Date.now()
       this.db.savePipeline(pipeline)
+      console.log('[DEBUG:save] savePipeline OK, id:', pipeline.id, 'tasks:', pipeline.tasks.length)
+
+      // 저장 직후 확인
+      const verify = this.db.getPipeline(pipeline.id)
+      console.log('[DEBUG:save] verify after save:', verify ? `found (${verify.tasks.length} tasks)` : 'NOT FOUND')
+
       return { success: true }
     } catch (error) {
+      console.error('[DEBUG:save] savePipeline ERROR:', error)
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error'

@@ -444,18 +444,24 @@ const setupIpcHandlers = (window: BrowserWindow) => {
 app.whenReady().then(() => {
   // 저장된 경로가 있으면 자동으로 로드
   const savedPath = appConfig.get('storagePath')
+  console.log('[DEBUG:startup] savedPath from config:', JSON.stringify(savedPath))
 
   if (savedPath) {
     historyDB.setDatabasePath(savedPath)
 
     // Pipeline & Task 데이터베이스 초기화
     const db = historyDB.getDatabase()
+    console.log('[DEBUG:startup] db instance:', db ? 'OK' : 'NULL')
     if (db) {
       pipelineDB = new PipelineDatabase(db)
       pipelineManager = new PipelineManager(pipelineDB)
 
       taskDB = new TaskDatabase(db)
       taskManager = new TaskManager(taskDB)
+
+      // 시작 시 저장된 파이프라인 확인
+      const pipelines = pipelineDB.getAllPipelines()
+      console.log('[DEBUG:startup] pipelines loaded from DB:', pipelines.length, pipelines.map(p => p.name))
     }
   }
 

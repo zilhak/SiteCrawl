@@ -11,7 +11,8 @@ export const TASK_IO_MAP: Record<TaskCategory, { input: string; output: string }
   link_extraction: { input: 'page', output: 'urls' },
   resource_extraction: { input: 'urls', output: 'urls' },
   string_db_save: { input: 'strings', output: 'strings' },
-  string_display: { input: 'strings', output: 'strings' }
+  string_display: { input: 'strings', output: 'strings' },
+  result_save: { input: 'strings', output: 'none' }
 }
 
 export const CATEGORY_LABELS: Record<TaskCategory, string> = {
@@ -20,21 +21,25 @@ export const CATEGORY_LABELS: Record<TaskCategory, string> = {
   link_extraction: '링크 추출',
   resource_extraction: '리소스 추출',
   string_db_save: 'DB 저장',
-  string_display: '화면 표시'
+  string_display: '화면 표시',
+  result_save: 'Result 저장'
 }
 
-export const CATEGORY_COLORS: Record<TaskCategory, 'warning' | 'info' | 'success' | 'secondary'> = {
+export const CATEGORY_COLORS: Record<TaskCategory, 'warning' | 'info' | 'success' | 'secondary' | 'error'> = {
   string_filter: 'warning',
   page_navigation: 'info',
   link_extraction: 'success',
   resource_extraction: 'secondary',
   string_db_save: 'warning',
-  string_display: 'info'
+  string_display: 'info',
+  result_save: 'success'
 }
 
 export const IO_TYPE_LABELS: Record<string, string> = {
   url: 'URL (단일)',
   urls: 'URL 배열',
   strings: '문자열 배열',
-  page: 'Page (브라우저)'
+  page: 'Page (브라우저)',
+  none: '없음 (터미널)',
+  empty: '비어있음'
 }
