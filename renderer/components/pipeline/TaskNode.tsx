@@ -53,7 +53,7 @@ export default function TaskNode({ data }: { data: TaskNodeData }) {
           textAlign: 'center',
           position: 'relative',
           bgcolor: data.isRoot
-            ? (data.isFinalRoot ? 'warning.main' : 'primary.main')
+            ? (data.isFinalRoot ? 'warning.dark' : 'primary.main')
             : data.isConfigured
               ? 'background.paper'
               : 'background.default',
