@@ -638,7 +638,7 @@ function ResultSaveConfigForm({ config, onChange }: ConfigProps) {
         label="Target Index"
         type="number"
         value={config.targetIndex ?? -1}
-        onChange={(e) => onChange('targetIndex', parseInt(e.target.value) || -1)}
+        onChange={(e) => onChange('targetIndex', Math.max(-1, parseInt(e.target.value) || -1))}
         helperText="-1: 마지막에 추가 (append), 0 이상: 해당 인덱스에 저장"
         size="small"
         fullWidth
