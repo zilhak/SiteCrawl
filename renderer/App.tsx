@@ -67,6 +67,8 @@ function App() {
     setShowPipelineEditor(false)
     setEditingPipelineId(null)
     setPipelineRefreshKey(prev => prev + 1)
+    // Electron 포커스 리셋
+    setTimeout(() => (document.activeElement as HTMLElement)?.blur(), 0)
   }
 
   // 저장된 경로 자동 로드
@@ -122,7 +124,11 @@ function App() {
             <Button
               color="inherit"
               startIcon={mode === 'crawling' ? <BuildIcon /> : <BugReportIcon />}
-              onClick={() => setMode(mode === 'crawling' ? 'pipeline-config' : 'crawling')}
+              onClick={() => {
+                setMode(mode === 'crawling' ? 'pipeline-config' : 'crawling')
+                // Electron 포커스 리셋: 모드 전환 시 webContents 포커스가 꼬이는 문제 방지
+                setTimeout(() => (document.activeElement as HTMLElement)?.blur(), 0)
+              }}
               sx={{ mr: 1 }}
             >
               {mode === 'crawling' ? '파이프라인 설정' : '크롤링'}
