@@ -147,6 +147,10 @@ export class HistoryDatabase {
   // 데이터베이스 닫기
   close(): void {
     if (this.db) {
+      // WAL 모드: close 전에 명시적 checkpoint로 데이터 영속 보장
+      try {
+        this.db.pragma('wal_checkpoint(TRUNCATE)')
+      } catch { /* ignore */ }
       this.db.close()
       this.db = null
     }

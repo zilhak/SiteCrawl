@@ -247,10 +247,15 @@ const setupIpcHandlers = (window: BrowserWindow) => {
   })
 
   ipcMain.handle('pipeline:save', async (_event, pipeline: unknown) => {
+    console.log('[DEBUG:ipc] pipeline:save called, pipelineManager:', !!pipelineManager)
     if (!pipelineManager) {
       throw new Error('저장소가 설정되지 않았습니다.')
     }
-    return pipelineManager.savePipeline(pipeline as Pipeline)
+    const p = pipeline as Pipeline
+    console.log('[DEBUG:ipc] pipeline:save id:', p.id, 'name:', p.name, 'tasks:', p.tasks?.length)
+    const result = pipelineManager.savePipeline(p)
+    console.log('[DEBUG:ipc] pipeline:save result:', result)
+    return result
   })
 
   ipcMain.handle('pipeline:get', async (_event, id: string) => {
@@ -259,8 +264,11 @@ const setupIpcHandlers = (window: BrowserWindow) => {
   })
 
   ipcMain.handle('pipeline:get-all', async () => {
+    console.log('[DEBUG:ipc] pipeline:get-all called, pipelineManager:', !!pipelineManager)
     if (!pipelineManager) return []
-    return pipelineManager.getAllPipelines()
+    const all = pipelineManager.getAllPipelines()
+    console.log('[DEBUG:ipc] pipeline:get-all returned:', all.length, 'pipelines')
+    return all
   })
 
   ipcMain.handle('pipeline:search', async (_event, query: string) => {
