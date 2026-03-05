@@ -165,10 +165,7 @@ export class PipelineDatabase {
 
     transaction()
 
-    // WAL → 메인 DB 즉시 반영 (앱 비정상 종료 시에도 데이터 보존)
-    try { this.db.pragma('wal_checkpoint(PASSIVE)') } catch { /* ignore */ }
-
-    console.log('[DEBUG:db] savePipeline transaction committed, id:', pipeline.id)
+    console.log('[DEBUG:db] savePipeline committed, id:', pipeline.id)
   }
 
   /**

@@ -29,7 +29,9 @@ export class HistoryDatabase {
 
     this.dbPath = path.join(storagePath, 'sitecrawl.db')
     this.db = new Database(this.dbPath)
-    this.db.pragma('journal_mode = WAL')
+    // DELETE 모드: 트랜잭션이 메인 DB 파일에 직접 기록됨 (WAL 데이터 손실 방지)
+    this.db.pragma('journal_mode = DELETE')
+    this.db.pragma('synchronous = FULL')
     this.initialize()
   }
 
@@ -147,10 +149,6 @@ export class HistoryDatabase {
   // 데이터베이스 닫기
   close(): void {
     if (this.db) {
-      // WAL 모드: close 전에 명시적 checkpoint로 데이터 영속 보장
-      try {
-        this.db.pragma('wal_checkpoint(TRUNCATE)')
-      } catch { /* ignore */ }
       this.db.close()
       this.db = null
     }

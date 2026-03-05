@@ -176,11 +176,17 @@ const setupIpcHandlers = (window: BrowserWindow) => {
   ipcMain.handle('storage:set-path', async (_event, storagePath: string) => {
     try {
       // 이미 같은 경로로 활성화되어 있으면 중복 초기화 방지
-      if (historyDB.isActive() && pipelineManager && taskManager) {
+      const isActive = historyDB.isActive()
+      const hasPM = !!pipelineManager
+      const hasTM = !!taskManager
+      console.log('[DEBUG:set-path] guard check - isActive:', isActive, 'pipelineManager:', hasPM, 'taskManager:', hasTM, 'path:', storagePath)
+      if (isActive && hasPM && hasTM) {
+        console.log('[DEBUG:set-path] guard PASSED - 중복 초기화 방지, config만 저장')
         appConfig.set('storagePath', storagePath)
         return true
       }
 
+      console.log('[DEBUG:set-path] guard FAILED - DB 재초기화 실행!')
       historyDB.setDatabasePath(storagePath)
 
       // Pipeline & Task 데이터베이스 초기화
@@ -488,7 +494,22 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
+  // DEBUG: 종료 시 DB 상태 확인
+  try {
+    const db = historyDB.getDatabase()
+    if (db) {
+      const pCount = (db.prepare('SELECT COUNT(*) as c FROM pipelines').get() as { c: number }).c
+      const tCount = (db.prepare('SELECT COUNT(*) as c FROM pipeline_tasks').get() as { c: number }).c
+      console.log('[DEBUG:close] 종료 전 DB 상태 - pipelines:', pCount, 'tasks:', tCount)
+    } else {
+      console.log('[DEBUG:close] DB가 null!')
+    }
+  } catch (err) {
+    console.log('[DEBUG:close] 상태 확인 오류:', err)
+  }
+
   historyDB.close()
+  console.log('[DEBUG:close] historyDB.close() 완료')
   if (process.platform !== 'darwin') app.quit()
 })
 
