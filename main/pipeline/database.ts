@@ -34,7 +34,7 @@ export class PipelineDatabase {
     try {
       const tableInfo = this.db.pragma('table_info(pipeline_tasks)') as { name: string }[]
       if (tableInfo.length > 0 && !tableInfo.some(col => col.name === 'category')) {
-        console.log('[DEBUG:init] DROPPING pipeline_tasks (no category column)')
+        console.log('[PipelineDB] 마이그레이션: pipeline_tasks 테이블 재생성 (category 컬럼 누락)')
         this.db.exec('DROP TABLE IF EXISTS pipeline_tasks')
       }
     } catch { /* 테이블이 아예 없는 경우 무시 */ }
@@ -64,7 +64,7 @@ export class PipelineDatabase {
       const taskTableInfo = this.db.pragma('table_info(pipeline_tasks)') as { name: string }[]
       if (taskTableInfo.length > 0 && !taskTableInfo.some(col => col.name === 'phase')) {
         this.db.exec(`ALTER TABLE pipeline_tasks ADD COLUMN phase TEXT DEFAULT 'process'`)
-        console.log('[DEBUG:init] Added phase column to pipeline_tasks')
+        console.log('[PipelineDB] 마이그레이션: phase 컬럼 추가')
       }
     } catch { /* 테이블이 없는 경우 무시 */ }
 
@@ -93,13 +93,6 @@ export class PipelineDatabase {
         FOREIGN KEY (pipeline_id) REFERENCES pipelines(id) ON DELETE CASCADE
       )
     `)
-
-    // 초기화 후 데이터 확인
-    try {
-      const pipelineCount = (this.db.prepare('SELECT COUNT(*) as cnt FROM pipelines').get() as any).cnt
-      const taskCount = (this.db.prepare('SELECT COUNT(*) as cnt FROM pipeline_tasks').get() as any).cnt
-      console.log('[DEBUG:init] after init - pipelines:', pipelineCount, 'tasks:', taskCount)
-    } catch { /* ignore */ }
 
     // 인덱스 생성
     this.db.exec(`
@@ -165,7 +158,7 @@ export class PipelineDatabase {
 
     transaction()
 
-    console.log('[DEBUG:db] savePipeline committed, id:', pipeline.id)
+    console.log('[PipelineDB] savePipeline OK, id:', pipeline.id, 'tasks:', pipeline.tasks.length)
   }
 
   /**

@@ -3,22 +3,23 @@ import * as path from 'path'
 import { randomUUID } from 'crypto'
 import { Crawler } from './crawler'
 import type { CrawlOptions, LoginOptions } from './crawler'
-import { HistoryDatabase } from './database'
-import { PipelineDatabase, PipelineManager } from './pipeline'
+import { AppDatabase } from './app-database'
 import type { Pipeline, PipelineTask } from './pipeline/types'
 import { PipelineExecutionEngine } from './pipeline/execution'
-import { TaskDatabase, TaskManager } from './task'
 import type { CreateTaskDTO, TaskCategory } from './task/types'
 import { appConfig } from './config'
 
 const isDev = !app.isPackaged
 
 let mainWindow: BrowserWindow | null = null
-const historyDB = new HistoryDatabase()
-let pipelineDB: PipelineDatabase | null = null
-let pipelineManager: PipelineManager | null = null
-let taskDB: TaskDatabase | null = null
-let taskManager: TaskManager | null = null
+
+/**
+ * 앱 전체의 DB 연결 — 유일한 소유자
+ *
+ * 이전 구조: historyDB(소유) + pipelineDB/pipelineManager/taskDB/taskManager(분산 변수)
+ * 새 구조:   appDB 하나가 모든 서브모듈을 소유하고 관리
+ */
+const appDB = new AppDatabase()
 
 const createWindow = () => {
   mainWindow = new BrowserWindow({
@@ -37,20 +38,17 @@ const createWindow = () => {
   })
 
   if (isDev) {
-    // 개발 서버로부터 로딩
     mainWindow.loadURL('http://localhost:5173')
     mainWindow.webContents.openDevTools()
   } else {
-    // 빌드된 정적 파일 로딩
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'))
   }
 
-  // IPC 핸들러 등록
   setupIpcHandlers(mainWindow)
 }
 
 const setupIpcHandlers = (window: BrowserWindow) => {
-  // 창 제어
+  // ==================== 창 제어 ====================
   ipcMain.handle('window:minimize', () => window.minimize())
   ipcMain.handle('window:maximize', () => {
     if (window.isMaximized()) {
@@ -63,19 +61,17 @@ const setupIpcHandlers = (window: BrowserWindow) => {
   ipcMain.handle('window:close', () => window.close())
   ipcMain.handle('window:is-maximized', () => window.isMaximized())
 
-  // 최대화 상태 변경 시 렌더러에 알림
   window.on('maximize', () => window.webContents.send('window:maximized-changed', true))
   window.on('unmaximize', () => window.webContents.send('window:maximized-changed', false))
 
-  // 크롤링 시작
+  // ==================== 크롤링 ====================
   ipcMain.handle('crawler:start', async (_event, url: string, useSession: boolean = false, options?: unknown) => {
     try {
       const crawler = new Crawler(window)
       const result = await crawler.start(url, useSession, options as CrawlOptions)
 
-      // 히스토리 저장 (데이터베이스가 활성화된 경우)
-      if (historyDB.isActive()) {
-        historyDB.saveHistory({
+      if (appDB.isOpen()) {
+        appDB.saveHistory({
           url: result.url,
           title: result.title,
           description: result.description,
@@ -93,7 +89,6 @@ const setupIpcHandlers = (window: BrowserWindow) => {
     }
   })
 
-  // 자동 로그인
   ipcMain.handle('crawler:login', async (_event, options: unknown) => {
     try {
       const crawler = new Crawler(window)
@@ -106,7 +101,6 @@ const setupIpcHandlers = (window: BrowserWindow) => {
     }
   })
 
-  // 수동 로그인
   ipcMain.handle('crawler:manual-login', async (_event, url: string) => {
     try {
       const crawler = new Crawler(window)
@@ -119,7 +113,6 @@ const setupIpcHandlers = (window: BrowserWindow) => {
     }
   })
 
-  // 저장된 세션 목록 조회
   ipcMain.handle('crawler:get-sessions', async () => {
     try {
       const crawler = new Crawler(window)
@@ -130,7 +123,6 @@ const setupIpcHandlers = (window: BrowserWindow) => {
     }
   })
 
-  // 세션 삭제
   ipcMain.handle('crawler:delete-session', async (_event, hostname: string) => {
     try {
       const crawler = new Crawler(window)
@@ -141,67 +133,35 @@ const setupIpcHandlers = (window: BrowserWindow) => {
     }
   })
 
-  // 저장 경로 선택 대화상자
+  // ==================== 저장소 관리 ====================
+
+  /**
+   * 저장 경로 선택 대화상자 (폴더 선택 UI → DB 초기화 → config 저장)
+   */
   ipcMain.handle('storage:select-path', async () => {
     const result = await dialog.showOpenDialog(window, {
       properties: ['openDirectory', 'createDirectory'],
       title: '저장 데이터 경로 선택'
     })
 
-    if (!result.canceled && result.filePaths.length > 0) {
-      const selectedPath = result.filePaths[0]
+    if (result.canceled || result.filePaths.length === 0) return null
 
-      // 이미 같은 경로로 활성화되어 있지 않으면 초기화
-      if (!historyDB.isActive() || !pipelineManager || !taskManager) {
-        historyDB.setDatabasePath(selectedPath)
-
-        // Pipeline & Task 데이터베이스 초기화
-        const db = historyDB.getDatabase()
-        if (db) {
-          pipelineDB = new PipelineDatabase(db)
-          pipelineManager = new PipelineManager(pipelineDB)
-
-          taskDB = new TaskDatabase(db)
-          taskManager = new TaskManager(taskDB)
-        }
-      }
-
-      return selectedPath
-    }
-
-    return null
+    const selectedPath = result.filePaths[0]
+    appDB.open(selectedPath)           // 이미 같은 경로면 내부에서 스킵
+    appConfig.set('storagePath', selectedPath) // config에도 반영
+    return selectedPath
   })
 
-  // 저장 경로 설정
+  /**
+   * 저장 경로 설정 (렌더러에서 이전에 저장된 경로로 호출)
+   *
+   * AppDatabase.open()이 내부에서 중복 호출을 방어하므로
+   * 렌더러가 여러 번 호출해도 안전하다.
+   */
   ipcMain.handle('storage:set-path', async (_event, storagePath: string) => {
     try {
-      // 이미 같은 경로로 활성화되어 있으면 중복 초기화 방지
-      const isActive = historyDB.isActive()
-      const hasPM = !!pipelineManager
-      const hasTM = !!taskManager
-      console.log('[DEBUG:set-path] guard check - isActive:', isActive, 'pipelineManager:', hasPM, 'taskManager:', hasTM, 'path:', storagePath)
-      if (isActive && hasPM && hasTM) {
-        console.log('[DEBUG:set-path] guard PASSED - 중복 초기화 방지, config만 저장')
-        appConfig.set('storagePath', storagePath)
-        return true
-      }
-
-      console.log('[DEBUG:set-path] guard FAILED - DB 재초기화 실행!')
-      historyDB.setDatabasePath(storagePath)
-
-      // Pipeline & Task 데이터베이스 초기화
-      const db = historyDB.getDatabase()
-      if (db) {
-        pipelineDB = new PipelineDatabase(db)
-        pipelineManager = new PipelineManager(pipelineDB)
-
-        taskDB = new TaskDatabase(db)
-        taskManager = new TaskManager(taskDB)
-      }
-
-      // 경로 저장
+      appDB.open(storagePath)           // 이미 같은 경로면 내부에서 스킵
       appConfig.set('storagePath', storagePath)
-
       return true
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
@@ -209,199 +169,156 @@ const setupIpcHandlers = (window: BrowserWindow) => {
     }
   })
 
-  // 저장된 경로 조회
   ipcMain.handle('storage:get-saved-path', async () => {
     return appConfig.get('storagePath')
   })
 
-  // 저장소 활성화 여부 확인
   ipcMain.handle('storage:is-active', async () => {
-    return historyDB.isActive()
+    return appDB.isOpen()
   })
 
-  // 히스토리 조회
-  ipcMain.handle('history:get-all', async () => {
-    return historyDB.getAllHistory()
-  })
+  // ==================== 히스토리 ====================
+  ipcMain.handle('history:get-all', async () => appDB.getAllHistory())
+  ipcMain.handle('history:get-recent', async (_event, limit: number = 10) => appDB.getRecentHistory(limit))
+  ipcMain.handle('history:search', async (_event, url: string) => appDB.getHistoryByUrl(url))
+  ipcMain.handle('history:delete', async (_event, id: number) => appDB.deleteHistory(id))
+  ipcMain.handle('history:clear', async () => appDB.clearAllHistory())
 
-  // 최근 히스토리 조회
-  ipcMain.handle('history:get-recent', async (_event, limit: number = 10) => {
-    return historyDB.getRecentHistory(limit)
-  })
-
-  // URL로 히스토리 검색
-  ipcMain.handle('history:search', async (_event, url: string) => {
-    return historyDB.getHistoryByUrl(url)
-  })
-
-  // 히스토리 삭제
-  ipcMain.handle('history:delete', async (_event, id: number) => {
-    return historyDB.deleteHistory(id)
-  })
-
-  // 모든 히스토리 삭제
-  ipcMain.handle('history:clear', async () => {
-    return historyDB.clearAllHistory()
-  })
-
-  // Pipeline CRUD
+  // ==================== Pipeline CRUD ====================
   ipcMain.handle('pipeline:create', async (_event, name: string, description?: string) => {
-    if (!pipelineManager) {
-      throw new Error('저장소가 설정되지 않았습니다. 먼저 저장 경로를 설정해주세요.')
-    }
-    return pipelineManager.createPipeline(name, description)
+    if (!appDB.pipelineManager) throw new Error('저장소가 설정되지 않았습니다.')
+    return appDB.pipelineManager.createPipeline(name, description)
   })
 
   ipcMain.handle('pipeline:save', async (_event, pipeline: unknown) => {
-    console.log('[DEBUG:ipc] pipeline:save called, pipelineManager:', !!pipelineManager)
-    if (!pipelineManager) {
-      throw new Error('저장소가 설정되지 않았습니다.')
-    }
+    if (!appDB.pipelineManager) throw new Error('저장소가 설정되지 않았습니다.')
     const p = pipeline as Pipeline
-    console.log('[DEBUG:ipc] pipeline:save id:', p.id, 'name:', p.name, 'tasks:', p.tasks?.length)
-    const result = pipelineManager.savePipeline(p)
-    console.log('[DEBUG:ipc] pipeline:save result:', result)
-    return result
+    return appDB.pipelineManager.savePipeline(p)
   })
 
   ipcMain.handle('pipeline:get', async (_event, id: string) => {
-    if (!pipelineManager) return null
-    return pipelineManager.getPipeline(id)
+    if (!appDB.pipelineManager) return null
+    return appDB.pipelineManager.getPipeline(id)
   })
 
   ipcMain.handle('pipeline:get-all', async () => {
-    console.log('[DEBUG:ipc] pipeline:get-all called, pipelineManager:', !!pipelineManager)
-    if (!pipelineManager) return []
-    const all = pipelineManager.getAllPipelines()
-    console.log('[DEBUG:ipc] pipeline:get-all returned:', all.length, 'pipelines')
-    return all
+    if (!appDB.pipelineManager) return []
+    return appDB.pipelineManager.getAllPipelines()
   })
 
   ipcMain.handle('pipeline:search', async (_event, query: string) => {
-    if (!pipelineManager) return []
-    return pipelineManager.searchPipelines(query)
+    if (!appDB.pipelineManager) return []
+    return appDB.pipelineManager.searchPipelines(query)
   })
 
   ipcMain.handle('pipeline:delete', async (_event, id: string) => {
-    if (!pipelineManager) return false
-    return pipelineManager.deletePipeline(id)
+    if (!appDB.pipelineManager) return false
+    return appDB.pipelineManager.deletePipeline(id)
   })
 
-  // Task Management
+  // ==================== Pipeline Task 관리 ====================
   ipcMain.handle('pipeline:add-task', async (_event, pipelineId: string, task: unknown) => {
-    if (!pipelineManager) {
-      throw new Error('저장소가 설정되지 않았습니다.')
-    }
-    return pipelineManager.addTask(pipelineId, task as PipelineTask)
+    if (!appDB.pipelineManager) throw new Error('저장소가 설정되지 않았습니다.')
+    return appDB.pipelineManager.addTask(pipelineId, task as PipelineTask)
   })
 
   ipcMain.handle('pipeline:remove-task', async (_event, pipelineId: string, taskName: string) => {
-    if (!pipelineManager) {
-      throw new Error('저장소가 설정되지 않았습니다.')
-    }
-    return pipelineManager.removeTask(pipelineId, taskName)
+    if (!appDB.pipelineManager) throw new Error('저장소가 설정되지 않았습니다.')
+    return appDB.pipelineManager.removeTask(pipelineId, taskName)
   })
 
   ipcMain.handle('pipeline:update-task', async (_event, pipelineId: string, taskName: string, updates: unknown) => {
-    if (!pipelineManager) {
-      throw new Error('저장소가 설정되지 않았습니다.')
-    }
-    return pipelineManager.updateTask(pipelineId, taskName, updates as Partial<PipelineTask>)
+    if (!appDB.pipelineManager) throw new Error('저장소가 설정되지 않았습니다.')
+    return appDB.pipelineManager.updateTask(pipelineId, taskName, updates as Partial<PipelineTask>)
   })
 
-  // Validation & Info
+  // ==================== Pipeline 검증/통계 ====================
   ipcMain.handle('pipeline:validate', async (_event, pipelineId: string) => {
-    if (!pipelineManager) {
-      return { valid: false, errors: ['저장소가 설정되지 않았습니다.'], warnings: [] }
-    }
-    return pipelineManager.validatePipeline(pipelineId)
+    if (!appDB.pipelineManager) return { valid: false, errors: ['저장소가 설정되지 않았습니다.'], warnings: [] }
+    return appDB.pipelineManager.validatePipeline(pipelineId)
   })
 
   ipcMain.handle('pipeline:get-stats', async (_event, pipelineId: string) => {
-    if (!pipelineManager) return null
-    return pipelineManager.getPipelineStats(pipelineId)
+    if (!appDB.pipelineManager) return null
+    return appDB.pipelineManager.getPipelineStats(pipelineId)
   })
 
   ipcMain.handle('pipeline:clone', async (_event, pipelineId: string, newName?: string) => {
-    if (!pipelineManager) return null
-    return pipelineManager.clonePipeline(pipelineId, newName)
+    if (!appDB.pipelineManager) return null
+    return appDB.pipelineManager.clonePipeline(pipelineId, newName)
   })
 
-  // Task CRUD (통합)
+  // ==================== Task CRUD ====================
   ipcMain.handle('task:create', async (_event, dto: unknown) => {
-    if (!taskManager) throw new Error('저장소가 설정되지 않았습니다.')
-    return taskManager.createTask(dto as CreateTaskDTO)
+    if (!appDB.taskManager) throw new Error('저장소가 설정되지 않았습니다.')
+    return appDB.taskManager.createTask(dto as CreateTaskDTO)
   })
 
   ipcMain.handle('task:update', async (_event, id: string, updates: unknown) => {
-    if (!taskManager) throw new Error('저장소가 설정되지 않았습니다.')
-    return taskManager.updateTask(id, updates as Partial<CreateTaskDTO>)
+    if (!appDB.taskManager) throw new Error('저장소가 설정되지 않았습니다.')
+    return appDB.taskManager.updateTask(id, updates as Partial<CreateTaskDTO>)
   })
 
   ipcMain.handle('task:get', async (_event, id: string) => {
-    if (!taskManager) throw new Error('저장소가 설정되지 않았습니다.')
-    return taskManager.getTask(id)
+    if (!appDB.taskManager) throw new Error('저장소가 설정되지 않았습니다.')
+    return appDB.taskManager.getTask(id)
   })
 
   ipcMain.handle('task:get-all', async () => {
-    if (!taskManager) throw new Error('저장소가 설정되지 않았습니다.')
-    return taskManager.getAllTasks()
+    if (!appDB.taskManager) throw new Error('저장소가 설정되지 않았습니다.')
+    return appDB.taskManager.getAllTasks()
   })
 
   ipcMain.handle('task:get-by-category', async (_event, category: string) => {
-    if (!taskManager) throw new Error('저장소가 설정되지 않았습니다.')
-    return taskManager.getTasksByCategory(category as TaskCategory)
+    if (!appDB.taskManager) throw new Error('저장소가 설정되지 않았습니다.')
+    return appDB.taskManager.getTasksByCategory(category as TaskCategory)
   })
 
   ipcMain.handle('task:search', async (_event, query: string) => {
-    if (!taskManager) throw new Error('저장소가 설정되지 않았습니다.')
-    return taskManager.searchTasks(query)
+    if (!appDB.taskManager) throw new Error('저장소가 설정되지 않았습니다.')
+    return appDB.taskManager.searchTasks(query)
   })
 
   ipcMain.handle('task:delete', async (_event, id: string) => {
-    if (!taskManager) throw new Error('저장소가 설정되지 않았습니다.')
-    return taskManager.deleteTask(id)
+    if (!appDB.taskManager) throw new Error('저장소가 설정되지 않았습니다.')
+    return appDB.taskManager.deleteTask(id)
   })
 
   ipcMain.handle('task:delete-multiple', async (_event, ids: string[]) => {
-    if (!taskManager) throw new Error('저장소가 설정되지 않았습니다.')
-    return taskManager.deleteTasks(ids)
+    if (!appDB.taskManager) throw new Error('저장소가 설정되지 않았습니다.')
+    return appDB.taskManager.deleteTasks(ids)
   })
 
   ipcMain.handle('task:create-quick', async (_event, category: string) => {
-    if (!taskManager) throw new Error('저장소가 설정되지 않았습니다.')
-    return taskManager.createQuickTask(category as TaskCategory)
+    if (!appDB.taskManager) throw new Error('저장소가 설정되지 않았습니다.')
+    return appDB.taskManager.createQuickTask(category as TaskCategory)
   })
 
   ipcMain.handle('task:get-paginated', async (_event, category: string, page: number, pageSize: number) => {
-    if (!taskManager) throw new Error('저장소가 설정되지 않았습니다.')
-    return taskManager.getTasksPaginated(category as TaskCategory, page, pageSize)
+    if (!appDB.taskManager) throw new Error('저장소가 설정되지 않았습니다.')
+    return appDB.taskManager.getTasksPaginated(category as TaskCategory, page, pageSize)
   })
 
   ipcMain.handle('task:validate', async (_event, task: unknown) => {
-    if (!taskManager) throw new Error('저장소가 설정되지 않았습니다.')
-    return taskManager.validateTask(task as any)
+    if (!appDB.taskManager) throw new Error('저장소가 설정되지 않았습니다.')
+    return appDB.taskManager.validateTask(task as any)
   })
 
-  // Pipeline 실행
+  // ==================== Pipeline 실행 ====================
   ipcMain.handle('pipeline:execute', async (_event, pipelineId: string, initialUrl: string) => {
-    if (!pipelineManager || !taskManager) {
-      throw new Error('저장소가 설정되지 않았습니다.')
-    }
+    if (!appDB.pipelineManager) throw new Error('저장소가 설정되지 않았습니다.')
 
-    const pipeline = pipelineManager.getPipeline(pipelineId)
+    const pipeline = appDB.pipelineManager.getPipeline(pipelineId)
     if (!pipeline) throw new Error('파이프라인을 찾을 수 없습니다.')
 
     const executionId = randomUUID()
+    const pdb = appDB.pipelineDB
 
     // 실행 기록 저장 (시작)
-    if (pipelineDB) {
-      pipelineDB.saveExecution({
-        id: executionId,
-        pipelineId,
-        initialUrl,
-        status: 'running',
-        startedAt: Date.now()
+    if (pdb) {
+      pdb.saveExecution({
+        id: executionId, pipelineId, initialUrl,
+        status: 'running', startedAt: Date.now()
       })
     }
 
@@ -410,36 +327,24 @@ const setupIpcHandlers = (window: BrowserWindow) => {
         window.webContents.send('pipeline:execution-progress', event)
       },
       saveStrings: (pid, eid, strings, dedup) => {
-        if (pipelineDB) {
-          pipelineDB.saveStrings(pid, eid, strings, dedup)
-        }
+        pdb?.saveStrings(pid, eid, strings, dedup)
       },
-      checkVisitedPage: (domain, path) => {
-        if (pipelineDB) {
-          return pipelineDB.checkVisitedPage(domain, path)
-        }
-        return false
+      checkVisitedPage: (domain, p) => {
+        return pdb?.checkVisitedPage(domain, p) ?? false
       },
-      saveVisitedPage: (domain, path) => {
-        if (pipelineDB) {
-          pipelineDB.saveVisitedPage(domain, path)
-        }
+      saveVisitedPage: (domain, p) => {
+        pdb?.saveVisitedPage(domain, p)
       }
     })
 
     try {
       const result = await engine.execute(pipeline, initialUrl, executionId)
 
-      // 실행 기록 업데이트
-      if (pipelineDB) {
-        pipelineDB.saveExecution({
-          id: executionId,
-          pipelineId,
-          initialUrl,
-          status: result.status,
-          startedAt: result.startedAt,
-          completedAt: result.completedAt,
-          error: result.error
+      if (pdb) {
+        pdb.saveExecution({
+          id: executionId, pipelineId, initialUrl,
+          status: result.status, startedAt: result.startedAt,
+          completedAt: result.completedAt, error: result.error
         })
       }
 
@@ -448,15 +353,11 @@ const setupIpcHandlers = (window: BrowserWindow) => {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
 
-      if (pipelineDB) {
-        pipelineDB.saveExecution({
-          id: executionId,
-          pipelineId,
-          initialUrl,
-          status: 'failed',
-          startedAt: Date.now(),
-          completedAt: Date.now(),
-          error: errorMessage
+      if (pdb) {
+        pdb.saveExecution({
+          id: executionId, pipelineId, initialUrl,
+          status: 'failed', startedAt: Date.now(),
+          completedAt: Date.now(), error: errorMessage
         })
       }
 
@@ -466,50 +367,20 @@ const setupIpcHandlers = (window: BrowserWindow) => {
   })
 }
 
+// ==================== 앱 생명주기 ====================
+
 app.whenReady().then(() => {
-  // 저장된 경로가 있으면 자동으로 로드
+  // config에 저장된 경로가 있으면 DB 열기
   const savedPath = appConfig.get('storagePath')
-  console.log('[DEBUG:startup] savedPath from config:', JSON.stringify(savedPath))
-
   if (savedPath) {
-    historyDB.setDatabasePath(savedPath)
-
-    // Pipeline & Task 데이터베이스 초기화
-    const db = historyDB.getDatabase()
-    console.log('[DEBUG:startup] db instance:', db ? 'OK' : 'NULL')
-    if (db) {
-      pipelineDB = new PipelineDatabase(db)
-      pipelineManager = new PipelineManager(pipelineDB)
-
-      taskDB = new TaskDatabase(db)
-      taskManager = new TaskManager(taskDB)
-
-      // 시작 시 저장된 파이프라인 확인
-      const pipelines = pipelineDB.getAllPipelines()
-      console.log('[DEBUG:startup] pipelines loaded from DB:', pipelines.length, pipelines.map(p => p.name))
-    }
+    appDB.open(savedPath)
   }
 
   createWindow()
 })
 
 app.on('window-all-closed', () => {
-  // DEBUG: 종료 시 DB 상태 확인
-  try {
-    const db = historyDB.getDatabase()
-    if (db) {
-      const pCount = (db.prepare('SELECT COUNT(*) as c FROM pipelines').get() as { c: number }).c
-      const tCount = (db.prepare('SELECT COUNT(*) as c FROM pipeline_tasks').get() as { c: number }).c
-      console.log('[DEBUG:close] 종료 전 DB 상태 - pipelines:', pCount, 'tasks:', tCount)
-    } else {
-      console.log('[DEBUG:close] DB가 null!')
-    }
-  } catch (err) {
-    console.log('[DEBUG:close] 상태 확인 오류:', err)
-  }
-
-  historyDB.close()
-  console.log('[DEBUG:close] historyDB.close() 완료')
+  appDB.close()
   if (process.platform !== 'darwin') app.quit()
 })
 
