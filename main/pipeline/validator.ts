@@ -69,39 +69,50 @@ export class PipelineValidator {
       }
     }
 
-    // 5. 트리 생성 및 순환 참조 검증
+    // 5. 트리 생성 및 순환 참조 검증 (phase별 분리)
     if (errors.length === 0) {
-      try {
-        const tree = PipelineTree.fromPipeline(pipeline)
+      const phases: ('process' | 'final')[] = ['process']
+      const hasFinal = pipeline.tasks.some(t => t.phase === 'final')
+      if (hasFinal) phases.push('final')
 
-        if (tree.hasCycle()) {
-          errors.push('순환 참조가 감지되었습니다. Pipeline은 트리 구조여야 합니다')
+      for (const phase of phases) {
+        const phaseLabel = phase === 'process' ? 'Process' : 'Final'
+        try {
+          const tree = PipelineTree.fromPipeline(pipeline, phase)
+
+          if (tree.hasCycle()) {
+            errors.push(`${phaseLabel} 구간에서 순환 참조가 감지되었습니다`)
+          }
+
+          // 6. 도달 불가능한 노드 검증
+          const unreachable = tree.getUnreachableNodes()
+          if (unreachable.length > 0) {
+            const names = unreachable.map(n => n.name).join(', ')
+            errors.push(`${phaseLabel} 구간에서 Root에서 도달할 수 없는 Task: ${names}`)
+          }
+
+          // 7. 고립된 노드 경고 (부모도 자식도 없는 노드)
+          const rootTrigger = phase === 'final' ? '_final_' : '_run_'
+          const phaseTasks = phase === 'process'
+            ? pipeline.tasks.filter(t => t.phase !== 'final')
+            : pipeline.tasks.filter(t => t.phase === 'final')
+
+          const isolated = phaseTasks.filter(task => {
+            const node = tree.getNode(task.name)
+            if (!node) return false
+            return task.trigger !== rootTrigger &&
+                   node.parent === null &&
+                   node.children.length === 0
+          })
+
+          if (isolated.length > 0) {
+            const names = isolated.map(t => t.name).join(', ')
+            warnings.push(`${phaseLabel} 구간에 고립된 Task (연결되지 않음): ${names}`)
+          }
+
+        } catch (error) {
+          errors.push(`${phaseLabel} 트리 생성 실패: ${error instanceof Error ? error.message : 'Unknown error'}`)
         }
-
-        // 6. 도달 불가능한 노드 검증
-        const unreachable = tree.getUnreachableNodes()
-        if (unreachable.length > 0) {
-          const names = unreachable.map(n => n.name).join(', ')
-          errors.push(`Root에서 도달할 수 없는 Task: ${names}`)
-        }
-
-        // 7. 고립된 노드 경고 (부모도 자식도 없는 노드)
-        const isolated = pipeline.tasks.filter(task => {
-          const node = tree.getNode(task.name)
-          if (!node) return false
-          return task.trigger !== '_run_' &&
-                 task.trigger !== '_final_' &&
-                 node.parent === null &&
-                 node.children.length === 0
-        })
-
-        if (isolated.length > 0) {
-          const names = isolated.map(t => t.name).join(', ')
-          warnings.push(`고립된 Task (연결되지 않음): ${names}`)
-        }
-
-      } catch (error) {
-        errors.push(`트리 생성 실패: ${error instanceof Error ? error.message : 'Unknown error'}`)
       }
     }
 
